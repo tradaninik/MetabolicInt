@@ -158,7 +158,7 @@ export default async function DashboardPage() {
                   </li>
                   <li className="flex items-center gap-2">
                     <span className="h-1.5 w-1.5 rounded-full bg-sky-500"></span>
-                    <span>Avoid sitting for > 2 hours</span>
+                    <span>Avoid sitting for &gt; 2 hours</span>
                   </li>
                 </ul>
               </div>
