@@ -1,8 +1,6 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../src/lib/prisma';
 import { FOODS } from '@mi/food-db';
 import bcrypt from 'bcryptjs';
-
-const prisma = new PrismaClient();
 
 async function main() {
   console.log('🌱 Seeding food catalog…');
