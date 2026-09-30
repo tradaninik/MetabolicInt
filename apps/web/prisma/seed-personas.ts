@@ -11,11 +11,11 @@ const foodIndex = Object.fromEntries(FOODS.map((f) => [f.id, f]));
 
 type HistoryOpts = {
   days: number;
-  fast: [number, number];
-  post: [number, number];
+  fast: number[];
+  post: number[];
   weight: number;
-  sleep: [number, number];
-  bp: { sys: [number, number]; dia: [number, number] };
+  sleep: number[];
+  bp: { sys: number[]; dia: number[] };
 };
 
 async function seedUserHistory(userId: string, label: string, opts: HistoryOpts) {
