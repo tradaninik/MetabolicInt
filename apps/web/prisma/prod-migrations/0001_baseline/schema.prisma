@@ -1,0 +1,260 @@
+// Prisma schema for Metabolic Intelligence.
+// Provider is sqlite for zero-setup local dev; switch to postgresql or a libSQL
+// driver for deploy (schema is portable — see docs/DEPLOY.md).
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// Reference food catalog (seeded from @mi/food-db).
+model Food {
+  id            String   @id
+  name          String
+  aliases       String?  // JSON-encoded string[]
+  region        String   // CuisineRegion
+  category      String   // FoodCategory
+  servingGrams  Float
+  katoriGrams   Float?
+  kcalPer100g   Float
+  carbsPer100g  Float
+  proteinPer100g Float
+  fatPer100g    Float
+  fiberPer100g  Float
+  gi            Float    // glycemic index 0-100
+  createdAt     DateTime @default(now())
+
+  entries      FoodEntry[]
+
+  @@index([region])
+  @@index([name])
+}
+
+/// App user. role = member | caregiver | doctor.
+model User {
+  id               String   @id @default(cuid())
+  email            String   @unique
+  passwordHash     String?
+  name             String?
+  image            String?
+  role             String   @default("member")
+  emailVerified    DateTime?
+
+  // Onboarding profile
+  onboardingComplete Boolean @default(false)
+  age               Int?
+  gender            String?
+  ethnicity         String?
+  country           String?
+  region            String?  // cuisine region
+  heightCm          Float?
+  weightKg          Float?
+  waistCm           Float?
+  bodyFatPct        Float?
+  hba1c             Float?
+  fastingGlucose    Float?
+  systolicBp        Int?
+  diastolicBp       Int?
+  totalCholesterol  Float?
+  sleepHours        Float?
+  activityLevel     String?
+  occupation        String?
+  smoking           String?
+  alcohol           String?
+  conditions        String?  // JSON
+  medications       String?  // JSON
+  familyHistory     String?  // JSON
+  goals             String?  // JSON
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  foodEntries       FoodEntry[]
+  glucoseReadings   GlucoseReading[]
+  activityEntries   ActivityEntry[]
+  sleepEntries      SleepEntry[]
+  weightEntries     WeightEntry[]
+  bpEntries         BloodPressureEntry[]
+  learnedModel      UserLearnedModel?
+  insights          InsightCard[]
+  coachThreads      CoachThread[]
+
+  // Care relationships
+  careGiven         CareRelationship[] @relation("Caregiver")
+  careReceived      CareRelationship[] @relation("Ward")
+
+  // Doctor links
+  doctorPatients    DoctorPatientLink[] @relation("Doctor")
+  patientDoctors    DoctorPatientLink[] @relation("Patient")
+
+  achievements      Achievement[]
+}
+
+model UserLearnedModel {
+  id                       String   @id @default(cuid())
+  user                     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId                   String   @unique
+  sensitivityMgDlPerGCarb  Float
+  sampleSize               Int
+  isPrior                  Boolean  @default(true)
+  updatedAt                DateTime @updatedAt
+}
+
+model FoodEntry {
+  id           String   @id @default(cuid())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId       String
+  food         Food     @relation(fields: [foodId], references: [id])
+  foodId       String
+  portionType  String   // katori | serving | grams
+  portionValue Float
+  grams        Float
+  kcal         Float
+  carbsG       Float
+  proteinG     Float
+  fatG         Float
+  photoPath    String?
+  notes        String?
+  loggedAt     DateTime @default(now())
+
+  @@index([userId, loggedAt])
+}
+
+model GlucoseReading {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  value     Float    // mg/dL
+  source    String   @default("manual") // manual | cgm
+  takenAt   DateTime @default(now())
+
+  @@index([userId, takenAt])
+}
+
+model ActivityEntry {
+  id          String   @id @default(cuid())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  type        String   // walk | yoga | strength | ...
+  durationMin Float
+  source      String   @default("manual") // manual | apple_health | google_fit | ...
+  at          DateTime @default(now())
+
+  @@index([userId, at])
+}
+
+model SleepEntry {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  hours     Float
+  wokeAt    DateTime @default(now())
+
+  @@index([userId, wokeAt])
+}
+
+model WeightEntry {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  kg        Float
+  takenAt   DateTime @default(now())
+
+  @@index([userId, takenAt])
+}
+
+model BloodPressureEntry {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  systolic  Int
+  diastolic Int
+  takenAt   DateTime @default(now())
+
+  @@index([userId, takenAt])
+}
+
+model InsightCard {
+  id         String   @id @default(cuid())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  type       String
+  title      String
+  body       String
+  effectPct  Float
+  confidence Float
+  evidence   String   // JSON
+  dismissed  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([userId, dismissed])
+}
+
+model CoachThread {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  title     String?
+  messages  CoachMessage[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CoachMessage {
+  id        String   @id @default(cuid())
+  thread    CoachThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  threadId  String
+  role      String   // user | coach
+  content   String
+  citations String?  // JSON
+  grounded  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@index([threadId])
+}
+
+/// Family monitoring: caregiver watches a ward.
+model CareRelationship {
+  id              String   @id @default(cuid())
+  caregiver       User     @relation("Caregiver", fields: [caregiverId], references: [id], onDelete: Cascade)
+  caregiverId     String
+  ward            User     @relation("Ward", fields: [wardId], references: [id], onDelete: Cascade)
+  wardId          String
+  relation        String?  // parent | spouse | child | ...
+  alertGlucoseHigh Boolean @default(true)
+  alertGlucoseLow  Boolean @default(true)
+  alertMissedMeds  Boolean @default(false)
+  createdAt       DateTime @default(now())
+
+  @@unique([caregiverId, wardId])
+}
+
+model DoctorPatientLink {
+  id              String   @id @default(cuid())
+  doctor          User     @relation("Doctor", fields: [doctorId], references: [id], onDelete: Cascade)
+  doctorId        String
+  patient         User     @relation("Patient", fields: [patientId], references: [id], onDelete: Cascade)
+  patientId       String
+  adherenceScore  Float?
+  riskFlags       String?  // JSON
+  createdAt       DateTime @default(now())
+
+  @@unique([doctorId, patientId])
+}
+
+model Achievement {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  type      String   // streak | badge | challenge
+  key       String   // e.g. '7_day_logging_streak'
+  value     Float?
+  unlockedAt DateTime @default(now())
+
+  @@unique([userId, type, key])
+}

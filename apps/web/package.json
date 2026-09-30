@@ -12,7 +12,10 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
     "test": "vitest run",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "db:migrate:diff": "node scripts/turso-migrate.mjs diff",
+    "db:migrate:prod": "node scripts/turso-migrate.mjs apply",
+    "db:migrate:status": "node scripts/turso-migrate.mjs status"
   },
   "dependencies": {
     "@libsql/client": "^0.8.1",

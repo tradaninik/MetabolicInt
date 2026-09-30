@@ -16,7 +16,10 @@
     "test:watch": "vitest",
     "db:push": "prisma db push --schema apps/web/prisma/schema.prisma",
     "db:seed": "npm run db:seed --workspace apps/web",
-    "db:studio": "prisma studio --schema apps/web/prisma/schema.prisma"
+    "db:studio": "prisma studio --schema apps/web/prisma/schema.prisma",
+    "db:migrate:diff": "npm run db:migrate:diff --workspace apps/web",
+    "db:migrate:prod": "npm run db:migrate:prod --workspace apps/web",
+    "db:migrate:status": "npm run db:migrate:status --workspace apps/web"
   },
   "devDependencies": {
     "prettier": "^3.3.3",
