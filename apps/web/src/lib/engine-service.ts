@@ -21,7 +21,7 @@ import { FOOD_INDEX } from '@mi/food-db';
 
 const DAY = 86_400_000;
 
-function toUserProfile(u: {
+export function toUserProfile(u: {
   age: number | null; gender: string | null; heightCm: number | null; weightKg: number | null;
   hba1c: number | null; fastingGlucose: number | null; activityLevel: string | null;
   sleepHours: number | null; region: string | null;

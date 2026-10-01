@@ -9,6 +9,7 @@ import {
   type UserProfile,
 } from '@mi/engine';
 import { macrosForGrams } from '@/lib/engine-service';
+import { afterMealLogged, type PendingCheckIn, type LearnedModelInfo } from '@/lib/pairing';
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
@@ -75,7 +76,25 @@ export async function POST(req: Request) {
     mealAt: Date.now(),
   });
 
-  return NextResponse.json({ entry, predictedSpike: spike });
+  // Pairing: derive the 2-hour check-in schedule for the just-logged meal, and
+  // refit the learned model if a retro-logged meal just completed a pair.
+  // Best-effort - the meal itself is already saved.
+  let checkIn: PendingCheckIn | null = null;
+  let model: LearnedModelInfo | null = null;
+  try {
+    const result = await afterMealLogged(session.user.id);
+    checkIn = result.checkIn;
+    model = result.model;
+  } catch (e) {
+    console.error('pairing: meal post failed', e);
+  }
+
+  return NextResponse.json({
+    entry,
+    predictedSpike: spike,
+    ...(checkIn ? { checkIn } : {}),
+    ...(model ? { model } : {}),
+  });
 }
 
 export async function GET() {
