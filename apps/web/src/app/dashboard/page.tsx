@@ -7,6 +7,8 @@ import AppShell from '@/components/AppShell';
 import HealthScoreRing from '@/components/dashboard/HealthScoreRing';
 import { GlucoseChart, WeightChart, ForecastChart } from '@/components/dashboard/Charts';
 import { REGION_LABELS } from '@mi/food-db';
+import { getPendingCheckIns } from '@/lib/pairing';
+import CheckInCard from '@/components/CheckInCard';
 
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
@@ -14,6 +16,7 @@ export default async function DashboardPage() {
 
   const data = await loadDashboardData(session.user.id);
   if (!data) redirect('/onboarding');
+  const pendingCheckIns = await getPendingCheckIns(session.user.id);
 
   const { healthScore: hs, dailySummary: daily, profile, sensitivity, isPrior } = data;
   const sub = hs.components;
@@ -42,6 +45,8 @@ export default async function DashboardPage() {
         <p className="mb-6 text-xs text-amber-700 dark:text-amber-400">
           ⚕️ Educational insights, not medical advice. Consult a clinician for treatment decisions.
         </p>
+
+        <CheckInCard pending={pendingCheckIns} sampleSize={data.sampleSize} isPrior={data.isPrior} />
 
         {/* Top row: score + daily summary */}
         <div className="grid gap-4 lg:grid-cols-3">

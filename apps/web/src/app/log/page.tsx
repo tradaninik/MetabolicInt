@@ -6,6 +6,7 @@ import AppShell from '@/components/AppShell';
 import type { Food, GlucoseSpike } from '@mi/engine';
 import { macrosForGrams, netCarbsG, estimateGlucoseSpike } from '@mi/engine';
 import { REGION_LABELS } from '@mi/food-db';
+import PostMealFeedback from '@/components/PostMealFeedback';
 
 export default function LogPage() {
   const [query, setQuery] = useState('');
@@ -21,6 +22,7 @@ export default function LogPage() {
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [postMeal, setPostMeal] = useState<{ loggedAt: number; name: string; dueAt: number } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Load user sensitivity for the live preview.
@@ -105,6 +107,15 @@ export default function LogPage() {
     setSaving(false);
     if (res.ok) {
       const j = await res.json();
+      if (j.entry && j.checkIn) {
+        setPostMeal({
+          loggedAt: new Date(j.entry.loggedAt).getTime(),
+          name: selected.name,
+          dueAt: j.checkIn.dueAt,
+        });
+      } else {
+        setPostMeal(null);
+      }
       const spike = j.predictedSpike?.deltaMgDl ?? 0;
       setSavedMsg(`Logged ${selected.name}. Predicted glucose rise ≈ ${Math.round(spike)} mg/dL.`);
       setSelected(null);
@@ -270,6 +281,10 @@ export default function LogPage() {
               </button>
             </div>
           </div>
+        )}
+
+        {postMeal && (
+          <PostMealFeedback meal={postMeal} onDismiss={() => setPostMeal(null)} />
         )}
 
         {savedMsg && (

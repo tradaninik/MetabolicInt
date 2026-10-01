@@ -24,6 +24,8 @@ export async function GET() {
     diabetic,
     sensitivity,
     onboardingComplete: u.onboardingComplete,
+    isPrior: u.learnedModel ? u.learnedModel.isPrior : true,
+    sampleSize: u.learnedModel ? u.learnedModel.sampleSize : 0,
     goals: safeParse(u.goals),
   });
 }

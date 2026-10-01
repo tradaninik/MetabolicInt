@@ -5,15 +5,23 @@ import { prisma } from '@/lib/prisma';
 import AppShell from '@/components/AppShell';
 import { GlucoseChart } from '@/components/dashboard/Charts';
 import GlucoseLogger from '@/components/GlucoseLogger';
+import CheckInCard from '@/components/CheckInCard';
+import { getPendingCheckIns } from '@/lib/pairing';
 
 export default async function GlucosePage() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) redirect('/login?callbackUrl=/glucose');
   const u = await prisma.user.findUnique({
     where: { id: session.user.id },
-    include: { glucoseReadings: { orderBy: { takenAt: 'desc' }, take: 200 } },
+    include: {
+    glucoseReadings: { orderBy: { takenAt: 'desc' }, take: 200 },
+    learnedModel: true,
+  },
   });
   if (!u) redirect('/onboarding');
+  const pendingCheckIns = await getPendingCheckIns(session.user.id);
+  const isPrior = u.learnedModel ? u.learnedModel.isPrior : true;
+  const sampleSize = u.learnedModel ? u.learnedModel.sampleSize : 0;
 
   const series = u.glucoseReadings.map((g) => ({ t: g.takenAt.getTime(), value: g.value })).sort((a, b) => a.t - b.t);
   const last30 = u.glucoseReadings.slice(0, 30).map((g) => g.value);
@@ -45,6 +53,7 @@ export default async function GlucosePage() {
 
         <div className="mt-4 rounded-2xl border border-neutral-200 p-5 dark:border-neutral-800">
           <h2 className="mb-3 text-sm font-semibold">Log a reading</h2>
+          <CheckInCard pending={pendingCheckIns} sampleSize={sampleSize} isPrior={isPrior} />
           <GlucoseLogger />
         </div>
       </div>
