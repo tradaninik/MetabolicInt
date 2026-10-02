@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import AppShell from '@/components/AppShell';
 import PostMealFeedback from '@/components/PostMealFeedback';
+import RecentMeals from '@/components/RecentMeals';
 import type { Food, GlucoseSpike } from '@mi/engine';
 import { macrosForGrams, netCarbsG, estimateGlucoseSpike } from '@mi/engine';
 import { REGION_LABELS } from '@mi/food-db';
@@ -313,6 +314,7 @@ export default function LogPage() {
       setNotes('');
       setWhenMin(0);
       if (fileRef.current) fileRef.current.value = '';
+      window.dispatchEvent(new Event('meals-updated'));
     } catch {
       setTray((t) => t.slice(savedCount));
       setError(`Saved ${savedCount} of ${tray.length} items. Could not save the rest - please try again.`);
@@ -554,6 +556,8 @@ export default function LogPage() {
         )}
 
         {postMeal && <PostMealFeedback meal={postMeal} onDismiss={() => setPostMeal(null)} />}
+
+        <RecentMeals />
 
         {savedMsg && (
           <div className="mt-4 rounded-lg border border-brand-300 bg-brand-50 p-4 text-sm text-brand-800 dark:border-brand-800 dark:bg-brand-950/40 dark:text-brand-200">

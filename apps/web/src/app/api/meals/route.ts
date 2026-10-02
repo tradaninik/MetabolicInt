@@ -9,7 +9,7 @@ import {
   type UserProfile,
 } from '@mi/engine';
 import { macrosForGrams } from '@/lib/engine-service';
-import { afterMealLogged, type PendingCheckIn, type LearnedModelInfo } from '@/lib/pairing';
+import { afterMealLogged, updateLearnedModel, type PendingCheckIn, type LearnedModelInfo } from '@/lib/pairing';
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
@@ -88,8 +88,7 @@ export async function POST(req: Request) {
     mealAt: loggedAtDate ? loggedAtDate.getTime() : Date.now(),
   });
 
-  // Pairing: derive the 2-hour check-in schedule for the just-logged meal, and
-  // refit the learned model if a retro-logged meal just completed a pair.
+  // Pairing: derive the 2-hour check-in schedule, refit if a pair just completed.
   // Best-effort - the meal itself is already saved.
   let checkIn: PendingCheckIn | null = null;
   let model: LearnedModelInfo | null = null;
@@ -107,6 +106,71 @@ export async function POST(req: Request) {
     ...(checkIn ? { checkIn } : {}),
     ...(model ? { model } : {}),
   });
+}
+
+export async function PATCH(req: Request) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { id, portionType, portionValue } = await req.json();
+  if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
+
+  const entry = await prisma.foodEntry.findUnique({ where: { id } });
+  if (!entry || entry.userId !== session.user.id) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+  const food = await prisma.food.findUnique({ where: { id: entry.foodId } });
+  if (!food) return NextResponse.json({ error: 'Food not found' }, { status: 404 });
+
+  const pt = portionType ?? entry.portionType;
+  const pv = Number(portionValue ?? entry.portionValue) || entry.portionValue;
+  let grams: number;
+  if (pt === 'grams') grams = pv;
+  else if (pt === 'katori') grams = pv * (food.katoriGrams ?? food.servingGrams);
+  else grams = pv * food.servingGrams;
+
+  const macros = macrosForGrams(
+    {
+      kcalPer100g: food.kcalPer100g, carbsPer100g: food.carbsPer100g,
+      proteinPer100g: food.proteinPer100g, fatPer100g: food.fatPer100g, fiberPer100g: food.fiberPer100g,
+    } as never,
+    grams,
+  );
+
+  const updated = await prisma.foodEntry.update({
+    where: { id },
+    data: {
+      portionType: pt, portionValue: pv, grams,
+      kcal: macros.kcal, carbsG: macros.carbsG, proteinG: macros.proteinG, fatG: macros.fatG,
+    },
+  });
+
+  // History changed - refit the learned model (best-effort).
+  try {
+    await updateLearnedModel(session.user.id);
+  } catch (e) {
+    console.error('pairing: refit after edit failed', e);
+  }
+  return NextResponse.json({ entry: updated });
+}
+
+export async function DELETE(req: Request) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const id = new URL(req.url).searchParams.get('id');
+  if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
+  const entry = await prisma.foodEntry.findUnique({ where: { id } });
+  if (!entry || entry.userId !== session.user.id) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+  await prisma.foodEntry.delete({ where: { id } });
+
+  // History changed - refit the learned model (best-effort).
+  try {
+    await updateLearnedModel(session.user.id);
+  } catch (e) {
+    console.error('pairing: refit after delete failed', e);
+  }
+  return NextResponse.json({ ok: true });
 }
 
 export async function GET() {
