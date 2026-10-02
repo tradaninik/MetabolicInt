@@ -11,6 +11,7 @@ import PostMealFeedback from '@/components/PostMealFeedback';
 export default function LogPage() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Food[]>([]);
+  const [fallback, setFallback] = useState(false);
   const [selected, setSelected] = useState<Food | null>(null);
   const [portionType, setPortionType] = useState<'serving' | 'katori' | 'grams'>('serving');
   const [portionValue, setPortionValue] = useState(1);
@@ -49,7 +50,17 @@ export default function LogPage() {
       const res = await fetch(`/api/foods?q=${encodeURIComponent(query)}${region ? `&region=${region}` : ''}`);
       if (res.ok) {
         const j = await res.json();
+        if (j.foods.length === 0 && region) {
+          const res2 = await fetch('/api/foods?q=' + encodeURIComponent(query));
+          if (res2.ok) {
+            const j2 = await res2.json();
+            setResults(j2.foods);
+            setFallback(true);
+            return;
+          }
+        }
         setResults(j.foods);
+        setFallback(false);
       }
     }, 200);
     return () => clearTimeout(t);
@@ -179,7 +190,13 @@ export default function LogPage() {
             </select>
           </div>
 
-          {results.length > 0 && (
+          {fallback && results.length > 0 && (
+          <p className='mt-2 text-xs text-neutral-500'>
+            No {(REGION_LABELS as Record<string, string | undefined>)[region] ?? 'regional'} matches for &quot;{query}&quot; - showing matches from all regions.
+          </p>
+        )}
+
+        {results.length > 0 && (
             <ul className="mt-3 max-h-72 overflow-y-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
               {results.map((f) => (
                 <li key={f.id}>
