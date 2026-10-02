@@ -20,6 +20,9 @@ export default function PostMealFeedback({ meal, onDismiss }: Props) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
+  const mealTimeStr = new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true,
+  }).format(new Date(meal.loggedAt));
   const dueStr = new Intl.DateTimeFormat('en-IN', {
     timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit', hour12: true,
   }).format(new Date(meal.dueAt));
@@ -53,7 +56,7 @@ export default function PostMealFeedback({ meal, onDismiss }: Props) {
         <button onClick={onDismiss} className="text-xs text-neutral-500 hover:underline">dismiss</button>
       </div>
       <p className="mt-1 text-xs text-brand-800 dark:text-brand-300" suppressHydrationWarning>
-        Check in around {dueStr} - your dashboard will remind you. Know your glucose from just before eating? Adding it now makes this meal count double.
+        Logged at {mealTimeStr} - check in around {dueStr} - your dashboard will remind you. Know your glucose from just before eating? Adding it now makes this meal count double.
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <input

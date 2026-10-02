@@ -3,6 +3,10 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
+function istTime(): string {
+  return new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit', hour12: true }).format(new Date());
+}
+
 export default function GlucoseLogger() {
   const router = useRouter();
   const [value, setValue] = useState('');
@@ -20,7 +24,7 @@ export default function GlucoseLogger() {
     });
     setLoading(false);
     if (res.ok) {
-      setMsg(`Logged ${v} mg/dL.`);
+      setMsg(`Logged ${v} mg/dL at ${istTime()}.`);
       setValue('');
       router.refresh();
     } else {

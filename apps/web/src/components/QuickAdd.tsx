@@ -24,6 +24,13 @@ const BACK_OPTIONS: { label: string; minutes: number }[] = [
   { label: '3 hr ago', minutes: 180 },
 ];
 
+function fmtIst(t: number): string {
+  return new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata", day: "numeric", month: "short",
+    hour: "numeric", minute: "2-digit", hour12: true,
+  }).format(new Date(t));
+}
+
 export default function QuickAdd() {
   const router = useRouter();
   const [open, setOpen] = useState<Kind | null>(null);
@@ -150,6 +157,9 @@ export default function QuickAdd() {
             {busy ? 'Saving...' : 'Save'}
           </button>
           <span className="text-xs text-neutral-500">{FIELDS[open].hint}</span>
+          <span className="text-xs text-neutral-400" suppressHydrationWarning>
+            Records as {fmtIst(Date.now() - backMin * 60_000)}.
+          </span>
         </div>
       )}
 
