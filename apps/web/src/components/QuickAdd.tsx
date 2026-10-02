@@ -2,8 +2,8 @@
 
 // Quick Add: log anything in seconds, no prompts, no required fields.
 // Design law: every input optional; whatever exists, whenever logged, is enough.
-// Repeat-meal re-logs the whole last meal GROUP (entries within 45 min), not a
-// single item - people repeat plates, not ingredients.
+// Repeat-meal re-logs the whole last meal GROUP; My Combos one-taps any saved
+// plate (SavedCombo rows hold full food snapshots - no lookups needed).
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -46,6 +46,11 @@ interface RepeatItem {
   portionType: string;
   portionValue: number;
 }
+interface MyCombo {
+  id: string;
+  name: string;
+  items: RepeatItem[];
+}
 
 export default function QuickAdd() {
   const router = useRouter();
@@ -56,6 +61,8 @@ export default function QuickAdd() {
   const [msg, setMsg] = useState<string | null>(null);
   const [lastMeal, setLastMeal] = useState<{ items: RepeatItem[]; name: string } | null>(null);
   const [repeatBusy, setRepeatBusy] = useState(false);
+  const [myCombos, setMyCombos] = useState<MyCombo[]>([]);
+  const [comboBusy, setComboBusy] = useState(false);
 
   useEffect(() => {
     fetch('/api/meals')
@@ -74,6 +81,15 @@ export default function QuickAdd() {
           (first.food?.name ?? 'last meal') +
           (group.length > 1 ? ' +' + (group.length - 1) + ' more' : '');
         setLastMeal({ items: group, name });
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/combos')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.combos) setMyCombos(d.combos);
       })
       .catch(() => {});
   }, []);
@@ -108,25 +124,44 @@ export default function QuickAdd() {
     }
   }
 
+  async function postItems(items: RepeatItem[]): Promise<void> {
+    for (const it of items) {
+      const res = await fetch('/api/meals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ foodId: it.foodId, portionType: it.portionType, portionValue: it.portionValue }),
+      });
+      if (!res.ok) throw new Error('save failed');
+    }
+  }
+
   async function repeatMeal() {
     if (!lastMeal || lastMeal.items.length === 0) return;
     setRepeatBusy(true);
     setMsg(null);
     try {
-      for (const it of lastMeal.items) {
-        const res = await fetch('/api/meals', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ foodId: it.foodId, portionType: it.portionType, portionValue: it.portionValue }),
-        });
-        if (!res.ok) throw new Error('save failed');
-      }
+      await postItems(lastMeal.items);
       setMsg('Logged ' + lastMeal.name + ' again.');
       router.refresh();
     } catch {
       setMsg('Could not save. Please try again.');
     } finally {
       setRepeatBusy(false);
+    }
+  }
+
+  async function logCombo(c: MyCombo) {
+    if (!c.items || c.items.length === 0) return;
+    setComboBusy(true);
+    setMsg(null);
+    try {
+      await postItems(c.items);
+      setMsg('Logged ' + c.name + '.');
+      router.refresh();
+    } catch {
+      setMsg('Could not save. Please try again.');
+    } finally {
+      setComboBusy(false);
     }
   }
 
@@ -160,6 +195,27 @@ export default function QuickAdd() {
           <span>{lastMeal ? 'Again: ' + lastMeal.name.slice(0, 18) : 'Meal again'}</span>
         </button>
       </div>
+
+      {myCombos.length > 0 && (
+        <div className="mt-3">
+          <p className="text-xs font-medium text-neutral-500">My combos:</p>
+          <div className="mt-1 -mx-1 overflow-x-auto px-1 pb-1">
+            <div className="flex gap-2">
+              {myCombos.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => logCombo(c)}
+                  disabled={comboBusy}
+                  title={c.items.length + ' items'}
+                  className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50/50 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300"
+                >
+                  {c.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {open && (
         <div className="mt-3 flex flex-wrap items-center gap-2">

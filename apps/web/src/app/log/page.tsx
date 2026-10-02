@@ -70,9 +70,20 @@ export default function LogPage() {
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [postMeal, setPostMeal] = useState<{ loggedAt: number; name: string; dueAt: number } | null>(null);
+  const [comboName, setComboName] = useState('');
+  const [myCombos, setMyCombos] = useState<{ id: string; name: string; items: { food: Food; portionType: 'serving' | 'katori' | 'grams'; portionValue: number }[] }[]>([]);
+  const [comboMsg, setComboMsg] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Load user sensitivity for the live preview.
+  // Load user's saved combos.
+  useEffect(() => {
+    fetch('/api/combos')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d?.combos) setMyCombos(d.combos); })
+      .catch(() => {});
+  }, []);
+
+// Load user sensitivity for the live preview.
   useEffect(() => {
     fetch('/api/me/profile')
       .then((r) => (r.ok ? r.json() : null))
@@ -211,7 +222,45 @@ export default function LogPage() {
     return tray.length > 2 ? `${two} +${tray.length - 2} more` : two;
   }
 
-  function addPlate(plateId: string) {
+  async function saveCombo() {
+    if (tray.length === 0) return;
+    const nm = comboName.trim();
+    if (!nm) { setComboMsg('Give your combo a name first.'); return; }
+    try {
+      const res = await fetch('/api/combos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: nm, items: tray.map((x) => ({ food: x.food, portionType: x.portionType, portionValue: x.portionValue })) }),
+      });
+      if (!res.ok) throw new Error();
+      const j = await res.json();
+      setMyCombos((prev) => [j.combo, ...prev].slice(0, 30));
+      setComboName('');
+      setComboMsg('Saved. One tap re-logs this meal.');
+    } catch {
+      setComboMsg('Could not save the combo. Please try again.');
+    }
+  }
+
+  function loadComboIntoTray(i: number) {
+    const c = myCombos[i];
+    if (!c || c.items.length === 0) return;
+    setTray(c.items.map((x) => ({ food: x.food, portionType: x.portionType, portionValue: x.portionValue })));
+    setSavedMsg(null);
+    setError(null);
+  }
+
+  async function removeCombo(id: string) {
+    try {
+      const res = await fetch('/api/combos?id=' + encodeURIComponent(id), { method: 'DELETE' });
+      if (!res.ok) throw new Error();
+      setMyCombos((prev) => prev.filter((c) => c.id !== id));
+    } catch {
+      // removal is a convenience - silent failure is fine
+    }
+  }
+
+function addPlate(plateId: string) {
   const plate = PLATES.find((x) => x.id === plateId);
   if (!plate) return;
   const items = getPlateItems(plate);
@@ -375,6 +424,22 @@ function addFood(f: Food) {
             ))}
           </div>
         </div>
+
+        {myCombos.length > 0 && (
+          <div className="mb-2">
+            <p className="text-xs font-medium text-neutral-500">My combos - saved by you:</p>
+            <div className="mt-2 -mx-1 overflow-x-auto px-1 pb-1">
+              <div className="flex gap-2">
+                {myCombos.map((c, i) => (
+                  <span key={c.id} className="flex shrink-0 items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50/50 px-3 py-1.5 text-xs font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300">
+                    <button type="button" onClick={() => loadComboIntoTray(i)} title={c.items.length + ' items'} className="hover:underline">{c.name}</button>
+                    <button type="button" onClick={() => removeCombo(c.id)} aria-label="remove combo" className="text-neutral-400 hover:text-red-500">x</button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Category chips */}
         <div className="mt-6 -mx-1 overflow-x-auto px-1 pb-1">
@@ -562,7 +627,21 @@ function addFood(f: Food) {
               className="mt-4 w-full rounded-lg border border-neutral-300 bg-transparent px-3 py-2 text-sm dark:border-neutral-700"
             />
 
-            {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+            <input
+              value={comboName}
+              onChange={(e) => setComboName(e.target.value)}
+              placeholder="Name this combo (e.g. My Lunch Plate)"
+              className="w-56 rounded-lg border border-neutral-300 bg-transparent px-3 py-2 text-xs dark:border-neutral-700"
+            />
+            <button onClick={saveCombo} disabled={tray.length === 0}
+              className="rounded-lg border border-emerald-300 px-4 py-2 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/40">
+              Save as combo
+            </button>
+            {comboMsg && <span className="text-xs text-neutral-500">{comboMsg}</span>}
+          </div>
+
+          {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 
             <div className="mt-4 flex gap-2">
               <button
