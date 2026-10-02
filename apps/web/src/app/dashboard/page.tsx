@@ -9,6 +9,7 @@ import { GlucoseChart, WeightChart, ForecastChart } from '@/components/dashboard
 import { REGION_LABELS } from '@mi/food-db';
 import { getPendingCheckIns } from '@/lib/pairing';
 import CheckInCard from '@/components/CheckInCard';
+import QuickAdd from '@/components/QuickAdd';
 
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
@@ -47,6 +48,8 @@ export default async function DashboardPage() {
         </p>
 
         <CheckInCard pending={pendingCheckIns} sampleSize={data.sampleSize} isPrior={data.isPrior} />
+
+        <QuickAdd />
 
         {/* Top row: score + daily summary */}
         <div className="grid gap-4 lg:grid-cols-3">

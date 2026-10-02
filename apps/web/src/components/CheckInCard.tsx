@@ -42,6 +42,7 @@ export default function CheckInCard({ pending, sampleSize, isPrior }: Props) {
   const [when, setWhen] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [dismissed, setDismissed] = useState(false);
 
   const actionable =
     pending.find((p) => p.state === 'active') ??
@@ -91,7 +92,7 @@ export default function CheckInCard({ pending, sampleSize, isPrior }: Props) {
   }
 
   const show = !!actionable || upcoming.length > 0 || sampleSize > 0;
-  if (!show) return null;
+  if (!show || dismissed) return null;
 
   return (
     <section className="rounded-2xl border border-amber-200 bg-amber-50/60 p-5 dark:border-amber-900/60 dark:bg-amber-950/20">
@@ -125,6 +126,7 @@ export default function CheckInCard({ pending, sampleSize, isPrior }: Props) {
             >
               {busy ? 'Saving...' : 'Save reading'}
             </button>
+            <button type='button' onClick={() => setDismissed(true)} className='text-xs text-neutral-500 hover:underline'>Not now</button>
           </div>
         </div>
       )}
