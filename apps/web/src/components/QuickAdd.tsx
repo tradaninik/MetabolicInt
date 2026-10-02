@@ -77,6 +77,7 @@ export default function QuickAdd() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [exerciseType, setExerciseType] = useState('yoga');
+  const [bedHour, setBedHour] = useState(23);
   const [sysVal, setSysVal] = useState('');
   const [diaVal, setDiaVal] = useState('');
   const [lastMeal, setLastMeal] = useState<{ items: RepeatItem[]; name: string; names: string[] } | null>(null);
@@ -116,6 +117,19 @@ export default function QuickAdd() {
       .catch(() => {});
   }, []);
 
+  function sleepWakeMs(): number {
+    return Date.now() - backMin * 60_000;
+  }
+  function sleepBedMs(): number {
+    let bed = sleepWakeMs() - (Number(value) || 7) * 3_600_000;
+    const h = bedHour; // IST bedtime hour (0-24) picked by the user
+    const IST = 5.5 * 3_600_000;
+    const wakeIst = sleepWakeMs() + IST;
+    const dayStart = Math.floor(wakeIst / 86_400_000) * 86_400_000;
+    let bedIst = dayStart + h * 3_600_000;
+    if (bedIst > wakeIst) bedIst -= 86_400_000; // bedtime on the previous day
+    return bedIst - IST;
+  }
   async function save(kind: Kind) {
     if (kind === 'bp') {
       const s = Number(sysVal);
@@ -144,7 +158,7 @@ export default function QuickAdd() {
         if (kind === 'sugar' && backMin > 0) body.takenAt = Date.now() - backMin * 60_000;
         if (kind === 'walk' && backMin > 0) body.at = Date.now() - backMin * 60_000;
         if (kind === 'exercise' && backMin > 0) body.at = Date.now() - backMin * 60_000;
-        if (kind === 'sleep' && backMin > 0) body.wokeAt = Date.now() - backMin * 60_000;
+        if (kind === 'sleep' && backMin > 0) body.wokeAt = Date.now() - backMin * 60_000;if (kind === 'sleep') body.bedAt = sleepBedMs();
         if (kind === 'weight' && backMin > 0) body.takenAt = Date.now() - backMin * 60_000;
         res = await fetch(cfg.endpoint, {
           method: 'POST',
@@ -323,6 +337,11 @@ export default function QuickAdd() {
             {busy ? 'Saving...' : 'Save'}
           </button>
           <span className="text-xs text-neutral-500">{FIELDS[open].hint}</span>
+          {open === 'sleep' && (
+            <span className="text-xs text-neutral-400" suppressHydrationWarning>
+              {fmtIst(sleepBedMs())} to {fmtIst(sleepWakeMs())}.
+            </span>
+          )}
           <span className="text-xs text-neutral-400" suppressHydrationWarning>
             Records as {fmtIst(Date.now() - backMin * 60_000)}.
           </span>
