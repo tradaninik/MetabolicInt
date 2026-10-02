@@ -9,6 +9,7 @@ import type { Food, GlucoseSpike } from '@mi/engine';
 import { macrosForGrams, netCarbsG, estimateGlucoseSpike } from '@mi/engine';
 import { REGION_LABELS } from '@mi/food-db';
 import { classifyMealType } from '@/lib/meal-bits';
+import { PLATES, getPlateItems } from '@/lib/plates';
 
 interface TrayItem {
   food: Food;
@@ -210,7 +211,17 @@ export default function LogPage() {
     return tray.length > 2 ? `${two} +${tray.length - 2} more` : two;
   }
 
-  function addFood(f: Food) {
+  function addPlate(plateId: string) {
+  const plate = PLATES.find((x) => x.id === plateId);
+  if (!plate) return;
+  const items = getPlateItems(plate);
+  if (items.length === 0) return;
+  setTray(items.map((x) => ({ food: x.food, portionType: x.portionType, portionValue: x.portionValue })));
+  setSavedMsg(null);
+  setError(null);
+}
+
+function addFood(f: Food) {
     setSavedMsg(null);
     setError(null);
     setTray((t) => {
@@ -347,6 +358,22 @@ export default function LogPage() {
           <p className="mt-2 text-[11px] text-neutral-400">
             Photo is stored locally for now. Automatic food recognition is a later upgrade - for now, add items below.
           </p>
+        </div>
+
+        <p className="mt-6 text-xs font-medium text-neutral-500">Plates - one tap loads a full meal:</p>
+        <div className="mt-2 -mx-1 overflow-x-auto px-1 pb-1">
+          <div className="flex gap-2">
+            {PLATES.map((pl) => (
+              <button
+                key={pl.id}
+                onClick={() => addPlate(pl.id)}
+                title={pl.description}
+                className="shrink-0 rounded-full border border-brand-200 bg-brand-50/50 px-3 py-1.5 text-xs font-medium text-brand-700 hover:bg-brand-100 dark:border-brand-800 dark:bg-brand-950/30 dark:text-brand-300"
+              >
+                {pl.name}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Category chips */}
