@@ -3,7 +3,7 @@
 // Check-in prompt card: surfaces pending 2-hour post-meal glucose check-ins.
 // Fed by server pages via getPendingCheckIns() (src/lib/pairing.ts).
 // Copy follows MI tone: person-first, data-not-judgment, options not orders.
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { PendingCheckIn } from '@/lib/pairing';
 
@@ -43,6 +43,11 @@ export default function CheckInCard({ pending, sampleSize, isPrior }: Props) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState(false);
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowTick(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   const actionable =
     pending.find((p) => p.state === 'active') ??
@@ -104,7 +109,7 @@ export default function CheckInCard({ pending, sampleSize, isPrior }: Props) {
           <p className="mt-1 text-sm text-amber-800 dark:text-amber-300" suppressHydrationWarning>
             {actionable.state === 'morning'
               ? `You logged ${actionable.label} at ${fmtTime(actionable.startedAt)}. If you took a reading after dinner, add it with its actual time - it still counts for your model.`
-              : `You logged ${actionable.label} at ${fmtTime(actionable.startedAt)}. One reading now shows how that meal affected you.`}
+              : `You logged ${actionable.label} at ${fmtTime(actionable.startedAt)}. One reading now shows how that meal affected you. Reading window open until ${fmtTime(actionable.windowEndAt)} - about ${Math.max(0, Math.ceil((actionable.windowEndAt - nowTick) / 60_000))} min left.`}
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <input
@@ -132,7 +137,7 @@ export default function CheckInCard({ pending, sampleSize, isPrior }: Props) {
       )}
       {upcoming.length > 0 && !actionable && (
         <p className="text-sm text-amber-800 dark:text-amber-300" suppressHydrationWarning>
-          Next check-in: {upcoming[0].label} around {fmtTime(upcoming[0].dueAt)}. Your dashboard will remind you.
+          Next check-in: {upcoming[0].label} at {fmtTime(upcoming[0].dueAt)} - in {Math.max(0, Math.ceil((upcoming[0].dueAt - nowTick) / 60_000))} min. Your dashboard will remind you.
         </p>
       )}
       {msg && <p className="mt-2 text-xs text-amber-900 dark:text-amber-200">{msg}</p>}
