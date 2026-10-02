@@ -303,7 +303,7 @@ export default function LogPage() {
       }
 
       const spike = previewSpike?.deltaMgDl ?? 0;
-      setSavedMsg(`Logged ${label}. Predicted glucose rise about ${Math.round(spike)} mg/dL.${dayNote}`);
+      setSavedMsg(`Logged ${label} (${mealType}). Predicted glucose rise about ${Math.round(spike)} mg/dL.${dayNote}`);
       if (lastCheckIn) {
         setPostMeal({ loggedAt, name: lastCheckIn.label ?? label, dueAt: lastCheckIn.dueAt });
       }
@@ -473,7 +473,7 @@ export default function LogPage() {
 
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <label className="text-xs text-neutral-500">
-                When did you eat?
+                When did you eat?{' '}<span suppressHydrationWarning className='text-neutral-400'>({fmtWhen(whenMs)})</span>
                 <select
                   value={whenMin}
                   onChange={(e) => setWhenMin(Number(e.target.value))}
@@ -493,7 +493,7 @@ export default function LogPage() {
               <div className="mt-4 rounded-lg bg-neutral-50 p-3 text-sm dark:bg-neutral-900">
                 <div className="flex items-center justify-between">
                   <p>
-                    Predicted glucose rise: <strong>+{Math.round(previewSpike.deltaMgDl)} mg/dL</strong> peaking ~{previewSpike.timeToPeakMin} min after eating.
+                    Predicted rise for this {mealType}: <strong>+{Math.round(previewSpike.deltaMgDl)} mg/dL</strong> peaking ~{previewSpike.timeToPeakMin} min after eating.
                   </p>
                   <span className={`rounded-full px-3 py-1 text-xs font-semibold ${bandColor(band)}`}>
                     {band.toUpperCase()}
@@ -568,6 +568,13 @@ export default function LogPage() {
       </div>
     </AppShell>
   );
+}
+
+function fmtWhen(t: number): string {
+  return new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short',
+    hour: 'numeric', minute: '2-digit', hour12: true,
+  }).format(new Date(t));
 }
 
 function bandColor(band: string) {
