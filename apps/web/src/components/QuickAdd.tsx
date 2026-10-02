@@ -2,20 +2,33 @@
 
 // Quick Add: log anything in seconds, no prompts, no required fields.
 // Design law: every input optional; whatever exists, whenever logged, is enough.
-// Repeat-meal re-logs the whole last meal GROUP; My Combos one-taps any saved
-// plate (SavedCombo rows hold full food snapshots - no lookups needed).
+// v3: Exercise with type picker (yoga/gym/run/cycle/swim/sports), Blood Pressure
+// (two numbers, feeds the health score), and a repeat label that shows the WHOLE
+// meal group (short label + tooltip with every item that will be logged).
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
-type Kind = 'sugar' | 'walk' | 'sleep' | 'weight';
+type Kind = 'sugar' | 'walk' | 'sleep' | 'weight' | 'exercise' | 'bp';
 
 const FIELDS: Record<Kind, { label: string; icon: string; unit: string; endpoint: string; field: string; hint: string }> = {
   sugar: { label: 'Blood sugar', icon: '\u{1FA78}', unit: 'mg/dL', endpoint: '/api/glucose', field: 'value', hint: 'One number is enough.' },
   walk: { label: 'Walk', icon: '\u{1F6B6}', unit: 'min', endpoint: '/api/activity', field: 'minutes', hint: 'Any movement counts.' },
   sleep: { label: 'Sleep', icon: '\u{1F634}', unit: 'hours', endpoint: '/api/sleep', field: 'hours', hint: 'Last night.' },
-  weight: { label: 'Weight', icon: '\u2696}', unit: 'kg', endpoint: '/api/weight', field: 'kg', hint: 'Morning is fine.' },
+  weight: { label: 'Weight', icon: '\u2696', unit: 'kg', endpoint: '/api/weight', field: 'kg', hint: 'Morning is fine.' },
+  exercise: { label: 'Exercise', icon: '\u{1F3CB}', unit: 'min', endpoint: '/api/activity', field: 'minutes', hint: 'Pick the type below.' },
+  bp: { label: 'BP', icon: '\u{1FA7A}', unit: 'mmHg', endpoint: '/api/bp', field: '', hint: 'Both numbers, e.g. 120 / 80.' },
 };
+
+const EXERCISE_TYPES: { label: string; value: string }[] = [
+  { label: 'Yoga', value: 'yoga' },
+  { label: 'Gym / strength', value: 'strength' },
+  { label: 'Run', value: 'run' },
+  { label: 'Cycle', value: 'cycle' },
+  { label: 'Swim', value: 'swim' },
+  { label: 'Sports', value: 'sports' },
+  { label: 'Other', value: 'other' },
+];
 
 const BACK_OPTIONS: { label: string; minutes: number }[] = [
   { label: 'now', minutes: 0 },
@@ -32,6 +45,10 @@ function fmtIst(t: number): string {
     timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short',
     hour: 'numeric', minute: '2-digit', hour12: true,
   }).format(new Date(t));
+}
+
+function shortFoodName(n: string): string {
+  return n.replace(/\s*\(.*?\)\s*/g, '').trim();
 }
 
 interface QuickEntry {
@@ -59,7 +76,10 @@ export default function QuickAdd() {
   const [backMin, setBackMin] = useState(0);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const [lastMeal, setLastMeal] = useState<{ items: RepeatItem[]; name: string } | null>(null);
+  const [exerciseType, setExerciseType] = useState('yoga');
+  const [sysVal, setSysVal] = useState('');
+  const [diaVal, setDiaVal] = useState('');
+  const [lastMeal, setLastMeal] = useState<{ items: RepeatItem[]; name: string; names: string[] } | null>(null);
   const [repeatBusy, setRepeatBusy] = useState(false);
   const [myCombos, setMyCombos] = useState<MyCombo[]>([]);
   const [comboBusy, setComboBusy] = useState(false);
@@ -73,14 +93,16 @@ export default function QuickAdd() {
         if (!first?.foodId) return;
         const t0 = new Date(first.loggedAt).getTime();
         const group: RepeatItem[] = [];
+        const names: string[] = [];
         for (const en of entries) {
           if (t0 - new Date(en.loggedAt).getTime() > MEAL_GROUP_GAP_MS) break;
           group.push({ foodId: en.foodId, portionType: en.portionType, portionValue: en.portionValue });
+          names.push(en.food?.name ?? 'food');
         }
+        const firstShort = shortFoodName(names[0] ?? 'meal');
         const name =
-          (first.food?.name ?? 'last meal') +
-          (group.length > 1 ? ' +' + (group.length - 1) + ' more' : '');
-        setLastMeal({ items: group, name });
+          names.length > 1 ? `${firstShort.slice(0, 14)} +${names.length - 1}` : (names[0] ?? 'last meal').slice(0, 22);
+        setLastMeal({ items: group, name, names });
       })
       .catch(() => {});
   }, []);
@@ -95,25 +117,46 @@ export default function QuickAdd() {
   }, []);
 
   async function save(kind: Kind) {
-    const v = Number(value);
-    if (!Number.isFinite(v) || v <= 0) return;
-    const cfg = FIELDS[kind];
+    if (kind === 'bp') {
+      const s = Number(sysVal);
+      const d = Number(diaVal);
+      if (!Number.isFinite(s) || s <= 0 || !Number.isFinite(d) || d <= 0) return;
+    } else {
+      const v = Number(value);
+      if (!Number.isFinite(v) || v <= 0) return;
+    }
     setBusy(true);
     setMsg(null);
     try {
-      const body: Record<string, unknown> = { [cfg.field]: v };
-      if (kind === 'sugar' && backMin > 0) body.takenAt = Date.now() - backMin * 60_000;
-      if (kind === 'walk' && backMin > 0) body.at = Date.now() - backMin * 60_000;
-      if (kind === 'sleep' && backMin > 0) body.wokeAt = Date.now() - backMin * 60_000;
-      if (kind === 'weight' && backMin > 0) body.takenAt = Date.now() - backMin * 60_000;
-      const res = await fetch(cfg.endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
+      let res: Response;
+      if (kind === 'bp') {
+        const body: Record<string, unknown> = { systolic: Number(sysVal), diastolic: Number(diaVal) };
+        if (backMin > 0) body.takenAt = Date.now() - backMin * 60_000;
+        res = await fetch('/api/bp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+      } else {
+        const cfg = FIELDS[kind];
+        const body: Record<string, unknown> = { [cfg.field]: Number(value) };
+        if (kind === 'exercise') body.type = exerciseType;
+        if (kind === 'sugar' && backMin > 0) body.takenAt = Date.now() - backMin * 60_000;
+        if (kind === 'walk' && backMin > 0) body.at = Date.now() - backMin * 60_000;
+        if (kind === 'exercise' && backMin > 0) body.at = Date.now() - backMin * 60_000;
+        if (kind === 'sleep' && backMin > 0) body.wokeAt = Date.now() - backMin * 60_000;
+        if (kind === 'weight' && backMin > 0) body.takenAt = Date.now() - backMin * 60_000;
+        res = await fetch(cfg.endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+      }
       if (!res.ok) throw new Error('save failed');
-      setMsg(cfg.label + ' saved. Thank you.');
+      setMsg(FIELDS[kind].label + ' saved. Thank you.');
       setValue('');
+      setSysVal('');
+      setDiaVal('');
       setOpen(null);
       setBackMin(0);
       router.refresh();
@@ -141,7 +184,7 @@ export default function QuickAdd() {
     setMsg(null);
     try {
       await postItems(lastMeal.items);
-      setMsg('Logged ' + lastMeal.name + ' again.');
+      setMsg('Logged ' + lastMeal.names.slice(0, 3).join(' + ') + (lastMeal.names.length > 3 ? ' +' + (lastMeal.names.length - 3) + ' more' : '') + '.');
       router.refresh();
     } catch {
       setMsg('Could not save. Please try again.');
@@ -165,16 +208,19 @@ export default function QuickAdd() {
     }
   }
 
+  const canSave =
+    open === 'bp' ? !!sysVal && !!diaVal : open !== null && !!value;
+
   return (
     <section className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-950">
       <h2 className="text-sm font-semibold">Quick log</h2>
       <p className="mt-0.5 text-xs text-neutral-500">No time? One number is enough - log it in seconds.</p>
 
-      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
+      <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
         {(Object.keys(FIELDS) as Kind[]).map((k) => (
           <button
             key={k}
-            onClick={() => { setOpen(open === k ? null : k); setMsg(null); setValue(''); setBackMin(0); }}
+            onClick={() => { setOpen(open === k ? null : k); setMsg(null); setValue(''); setSysVal(''); setDiaVal(''); setBackMin(0); }}
             className={`flex flex-col items-center gap-1 rounded-xl border p-3 text-xs font-medium transition-colors ${
               open === k
                 ? 'border-brand-500 bg-brand-50 dark:border-brand-500 dark:bg-brand-950/40'
@@ -188,11 +234,11 @@ export default function QuickAdd() {
         <button
           onClick={repeatMeal}
           disabled={!lastMeal || repeatBusy}
-          title={lastMeal ? 'Repeat: ' + lastMeal.name : undefined}
+          title={lastMeal ? 'Repeat: ' + lastMeal.names.join(', ') : undefined}
           className="flex flex-col items-center gap-1 rounded-xl border border-neutral-200 p-3 text-xs font-medium hover:border-brand-300 disabled:opacity-50 dark:border-neutral-800 dark:hover:border-brand-700"
         >
           <span className="text-xl">{'\u{1F35C}'}</span>
-          <span>{lastMeal ? 'Again: ' + lastMeal.name.slice(0, 18) : 'Meal again'}</span>
+          <span>{lastMeal ? 'Again: ' + lastMeal.name : 'Meal again'}</span>
         </button>
       </div>
 
@@ -217,14 +263,50 @@ export default function QuickAdd() {
         </div>
       )}
 
+      {open === 'exercise' && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {EXERCISE_TYPES.map((t) => (
+            <button
+              key={t.value}
+              onClick={() => setExerciseType(t.value)}
+              className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                exerciseType === t.value
+                  ? 'border-brand-500 bg-brand-50 text-brand-700 dark:border-brand-500 dark:bg-brand-950/40 dark:text-brand-300'
+                  : 'border-neutral-200 text-neutral-600 hover:border-brand-300 dark:border-neutral-800 dark:text-neutral-400'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {open && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <input
-            type="number" value={value}
-            onChange={(e) => setValue(e.target.value)}
-            placeholder={FIELDS[open].unit}
-            className="w-28 rounded-lg border border-neutral-300 bg-transparent px-3 py-2 text-sm dark:border-neutral-700"
-          />
+          {open === 'bp' ? (
+            <>
+              <input
+                type="number" value={sysVal}
+                onChange={(e) => setSysVal(e.target.value)}
+                placeholder="systolic"
+                className="w-24 rounded-lg border border-neutral-300 bg-transparent px-3 py-2 text-sm dark:border-neutral-700"
+              />
+              <span className="text-sm text-neutral-400">/</span>
+              <input
+                type="number" value={diaVal}
+                onChange={(e) => setDiaVal(e.target.value)}
+                placeholder="diastolic"
+                className="w-24 rounded-lg border border-neutral-300 bg-transparent px-3 py-2 text-sm dark:border-neutral-700"
+              />
+            </>
+          ) : (
+            <input
+              type="number" value={value}
+              onChange={(e) => setValue(e.target.value)}
+              placeholder={FIELDS[open].unit}
+              className="w-28 rounded-lg border border-neutral-300 bg-transparent px-3 py-2 text-sm dark:border-neutral-700"
+            />
+          )}
           <select
             value={backMin}
             onChange={(e) => setBackMin(Number(e.target.value))}
@@ -235,7 +317,7 @@ export default function QuickAdd() {
             ))}
           </select>
           <button
-            onClick={() => save(open)} disabled={busy || !value}
+            onClick={() => save(open)} disabled={busy || !canSave}
             className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60"
           >
             {busy ? 'Saving...' : 'Save'}
