@@ -1,6 +1,7 @@
-// Minimal offline shell — caches the app shell for PWA install on Android.
-// v1 strategy: network-first for navigations, cache-first for static assets.
-const CACHE = 'mi-shell-v1';
+// Minimal offline shell - caches the app shell for PWA install on Android.
+// v2 strategy: network-first for navigations, cache-first for hashed static
+// assets only. API responses are NEVER cached - logged data must be fresh.
+const CACHE = 'mi-shell-v2';
 const SHELL = ['/', '/dashboard', '/manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
@@ -20,6 +21,8 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+  // API data must always come from the network - never serve cached API JSON.
+  if (url.pathname.startsWith('/api/')) return;
 
   if (request.mode === 'navigate') {
     event.respondWith(
