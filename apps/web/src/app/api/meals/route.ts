@@ -15,7 +15,7 @@ export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { foodId, portionType, portionValue, photoPath, notes } = await req.json();
+  const { foodId, portionType, portionValue, photoPath, notes, loggedAt } = await req.json();
 
   const food = await prisma.food.findUnique({ where: { id: foodId } });
   if (!food) return NextResponse.json({ error: 'Food not found' }, { status: 404 });
@@ -25,6 +25,17 @@ export async function POST(req: Request) {
     include: { learnedModel: true },
   });
   if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+
+  // Optional actual meal time - log a meal whenever you get to it. Defaults to now.
+  let loggedAtDate: Date | undefined;
+  if (loggedAt != null) {
+    const t = new Date(loggedAt).getTime();
+    if (!Number.isFinite(t)) return NextResponse.json({ error: 'Invalid loggedAt' }, { status: 400 });
+    if (t > Date.now() + 5 * 60_000) {
+      return NextResponse.json({ error: 'loggedAt cannot be in the future' }, { status: 400 });
+    }
+    loggedAtDate = new Date(t);
+  }
 
   // Resolve grams.
   let grams: number;
@@ -54,6 +65,7 @@ export async function POST(req: Request) {
       fatG: macros.fatG,
       photoPath: photoPath ?? null,
       notes: notes ?? null,
+      ...(loggedAtDate ? { loggedAt: loggedAtDate } : {}),
     },
   });
 
@@ -73,7 +85,7 @@ export async function POST(req: Request) {
     carbsG: nc,
     gi: food.gi,
     sensitivity,
-    mealAt: Date.now(),
+    mealAt: loggedAtDate ? loggedAtDate.getTime() : Date.now(),
   });
 
   // Pairing: derive the 2-hour check-in schedule for the just-logged meal, and

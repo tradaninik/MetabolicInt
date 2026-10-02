@@ -5,13 +5,14 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const q = url.searchParams.get('q')?.toLowerCase().trim() ?? '';
   const region = url.searchParams.get('region'); // optional filter
+  const category = url.searchParams.get('category'); // optional filter
   const limit = Math.min(parseInt(url.searchParams.get('limit') || '30', 10), 100);
 
   // Search name + aliases (aliases stored as JSON string).
-  // For SQLite we use contains-style matching; aliases are matched via a JSON like check.
   const foods = await prisma.food.findMany({
     where: {
       ...(region && region !== 'all' ? { region } : {}),
+      ...(category && category !== 'all' ? { category } : {}),
       OR: q
         ? [{ name: { contains: q } }, { aliases: { contains: q } }]
         : undefined,
