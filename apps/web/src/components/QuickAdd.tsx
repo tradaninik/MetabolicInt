@@ -2,7 +2,8 @@
 
 // Quick Add: log anything in seconds, no prompts, no required fields.
 // Design law: every input optional; whatever exists, whenever logged, is enough.
-// One number field per item; late entry welcome (optional minutes-ago back-time).
+// Repeat-meal re-logs the whole last meal GROUP (entries within 45 min), not a
+// single item - people repeat plates, not ingredients.
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -24,11 +25,26 @@ const BACK_OPTIONS: { label: string; minutes: number }[] = [
   { label: '3 hr ago', minutes: 180 },
 ];
 
+const MEAL_GROUP_GAP_MS = 45 * 60_000;
+
 function fmtIst(t: number): string {
-  return new Intl.DateTimeFormat("en-IN", {
-    timeZone: "Asia/Kolkata", day: "numeric", month: "short",
-    hour: "numeric", minute: "2-digit", hour12: true,
+  return new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short',
+    hour: 'numeric', minute: '2-digit', hour12: true,
   }).format(new Date(t));
+}
+
+interface QuickEntry {
+  foodId: string;
+  portionType: string;
+  portionValue: number;
+  loggedAt: string;
+  food?: { name?: string } | null;
+}
+interface RepeatItem {
+  foodId: string;
+  portionType: string;
+  portionValue: number;
 }
 
 export default function QuickAdd() {
@@ -38,17 +54,26 @@ export default function QuickAdd() {
   const [backMin, setBackMin] = useState(0);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const [lastMeal, setLastMeal] = useState<{ foodId: string; portionType: string; portionValue: number; name: string } | null>(null);
+  const [lastMeal, setLastMeal] = useState<{ items: RepeatItem[]; name: string } | null>(null);
   const [repeatBusy, setRepeatBusy] = useState(false);
 
   useEffect(() => {
     fetch('/api/meals')
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        const e = d?.entries?.[0];
-        if (e?.foodId) {
-          setLastMeal({ foodId: e.foodId, portionType: e.portionType, portionValue: e.portionValue, name: e.food?.name ?? 'last meal' });
+        const entries: QuickEntry[] = d?.entries ?? [];
+        const first = entries[0];
+        if (!first?.foodId) return;
+        const t0 = new Date(first.loggedAt).getTime();
+        const group: RepeatItem[] = [];
+        for (const en of entries) {
+          if (t0 - new Date(en.loggedAt).getTime() > MEAL_GROUP_GAP_MS) break;
+          group.push({ foodId: en.foodId, portionType: en.portionType, portionValue: en.portionValue });
         }
+        const name =
+          (first.food?.name ?? 'last meal') +
+          (group.length > 1 ? ' +' + (group.length - 1) + ' more' : '');
+        setLastMeal({ items: group, name });
       })
       .catch(() => {});
   }, []);
@@ -61,10 +86,10 @@ export default function QuickAdd() {
     setMsg(null);
     try {
       const body: Record<string, unknown> = { [cfg.field]: v };
-      if (backMin > 0) body.at = Date.now() - backMin * 60_000;
-      if (kind === 'sugar' && backMin > 0) { delete body.at; body.takenAt = Date.now() - backMin * 60_000; }
-      if (kind === 'sleep') { delete body.at; if (backMin > 0) body.wokeAt = Date.now() - backMin * 60_000; }
-      if (kind === 'weight') { delete body.at; if (backMin > 0) body.takenAt = Date.now() - backMin * 60_000; }
+      if (kind === 'sugar' && backMin > 0) body.takenAt = Date.now() - backMin * 60_000;
+      if (kind === 'walk' && backMin > 0) body.at = Date.now() - backMin * 60_000;
+      if (kind === 'sleep' && backMin > 0) body.wokeAt = Date.now() - backMin * 60_000;
+      if (kind === 'weight' && backMin > 0) body.takenAt = Date.now() - backMin * 60_000;
       const res = await fetch(cfg.endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -84,16 +109,18 @@ export default function QuickAdd() {
   }
 
   async function repeatMeal() {
-    if (!lastMeal) return;
+    if (!lastMeal || lastMeal.items.length === 0) return;
     setRepeatBusy(true);
     setMsg(null);
     try {
-      const res = await fetch('/api/meals', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ foodId: lastMeal.foodId, portionType: lastMeal.portionType, portionValue: lastMeal.portionValue }),
-      });
-      if (!res.ok) throw new Error('save failed');
+      for (const it of lastMeal.items) {
+        const res = await fetch('/api/meals', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ foodId: it.foodId, portionType: it.portionType, portionValue: it.portionValue }),
+        });
+        if (!res.ok) throw new Error('save failed');
+      }
       setMsg('Logged ' + lastMeal.name + ' again.');
       router.refresh();
     } catch {
@@ -126,10 +153,11 @@ export default function QuickAdd() {
         <button
           onClick={repeatMeal}
           disabled={!lastMeal || repeatBusy}
+          title={lastMeal ? 'Repeat: ' + lastMeal.name : undefined}
           className="flex flex-col items-center gap-1 rounded-xl border border-neutral-200 p-3 text-xs font-medium hover:border-brand-300 disabled:opacity-50 dark:border-neutral-800 dark:hover:border-brand-700"
         >
           <span className="text-xl">{'\u{1F35C}'}</span>
-          <span>{lastMeal ? 'Again: ' + lastMeal.name.slice(0, 14) : 'Meal again'}</span>
+          <span>{lastMeal ? 'Again: ' + lastMeal.name.slice(0, 18) : 'Meal again'}</span>
         </button>
       </div>
 
@@ -164,7 +192,7 @@ export default function QuickAdd() {
       )}
 
       <p className="mt-2 text-xs text-neutral-500">
-        Want more food choices? <Link href="/log" className="font-medium text-brand-600 hover:underline">Search all foods</Link>
+        Want more food choices? <Link href="/log" className="font-medium text-brand-600 hover:underline">Build a meal</Link>
       </p>
       {msg && <p className="mt-1 text-xs text-brand-700 dark:text-brand-300">{msg}</p>}
       <p className="mt-1 text-[11px] text-neutral-500">
