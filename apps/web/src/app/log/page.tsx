@@ -447,13 +447,13 @@ export default function LogPage() {
                       onChange={(e) => updateItem(i, { portionType: e.target.value as TrayItem['portionType'] })}
                       className="rounded border border-neutral-300 bg-transparent px-2 py-1 text-xs dark:border-neutral-700"
                     >
-                      <option value="serving">Serving</option>
+                      <option value="serving">{x.it.food.katoriGrams ? 'Serving' : 'Count (1 = one ' + x.it.food.name.toLowerCase() + ')'}</option>
                       {x.it.food.katoriGrams && <option value="katori">Katori</option>}
                       <option value="grams">Grams</option>
                     </select>
                     <input
                       type="number"
-                      min={0.5}
+                      min={0.5} step={0.5}
                       value={x.it.portionValue}
                       onChange={(e) => updateItem(i, { portionValue: Math.max(0.5, Number(e.target.value) || 1) })}
                       className="w-20 rounded border border-neutral-300 bg-transparent px-2 py-1 text-xs dark:border-neutral-700"
@@ -485,7 +485,7 @@ export default function LogPage() {
                 </select>
               </label>
               {mealType && (
-                <span className="text-xs text-neutral-500">This counts as your {mealType}.</span>
+                <span className="text-xs text-neutral-500">This counts as your <strong>{mealType}</strong> (about {Math.round(totals.nc)} g net carbs).</span>
               )}
             </div>
 
