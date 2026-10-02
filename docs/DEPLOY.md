@@ -71,3 +71,10 @@ When you choose to enable real CV food recognition and the LLM coach, set:
 
 Until then the deterministic engine handles both, and the LLM swap-in points are already
 isolated behind interfaces.
+
+
+## Production schema changes (Turso)
+
+Do not run prisma db push against production Turso. Use the committed migration
+runner instead - see docs/DB-MIGRATIONS.md for the full workflow:
+diff, review the SQL, apply, status.
