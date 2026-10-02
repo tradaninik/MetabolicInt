@@ -186,7 +186,7 @@ export default async function DashboardPage() {
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">{ev.label}</span>
                     <span className="text-xs text-neutral-400">
-                      {new Date(ev.t).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                      {new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true }).format(new Date(ev.t))}
                     </span>
                   </div>
                   {ev.text && <p className="text-xs text-neutral-500">{ev.text}</p>}
