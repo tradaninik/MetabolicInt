@@ -17,7 +17,12 @@ export async function POST(req: Request) {
 
   const { foodId, portionType, portionValue, photoPath, notes, loggedAt } = await req.json();
 
-  const food = await prisma.food.findUnique({ where: { id: foodId } });
+  // Owner guard (spec 3.4): catalog foods are public; a custom food is
+  // visible only to its creator. Someone else's custom foodId is
+  // indistinguishable from a missing one - 404, never 403.
+  const food = await prisma.food.findFirst({
+    where: { id: foodId, OR: [{ createdByUserId: null }, { createdByUserId: session.user.id }] },
+  });
   if (!food) return NextResponse.json({ error: 'Food not found' }, { status: 404 });
 
   const user = await prisma.user.findUnique({

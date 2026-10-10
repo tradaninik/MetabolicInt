@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { answerQuestion, priorSensitivity, type CoachContext, type UserProfile } from '@mi/engine';
-import { FOOD_INDEX } from '@mi/food-db';
+import { mergedFoodIndex } from '@/lib/food-index';
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
@@ -22,6 +22,10 @@ export async function POST(req: Request) {
     },
   });
   if (!u) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+  // F8: the merged index - catalog plus this user's custom foods - is still
+  // an engine-shaped parameter, so the engine stays frozen.
+  const foodIndex = await mergedFoodIndex(u.id);
 
   const conditions: string[] = u.conditions ? safeParse(u.conditions) : [];
   const diabetic = conditions.some((c) => c.includes('diabetes'));
@@ -50,7 +54,7 @@ export async function POST(req: Request) {
     profile,
     sensitivity: learned.sensitivityMgDlPerGCarb,
     learned: learned as never,
-    foodIndex: FOOD_INDEX as never,
+    foodIndex: foodIndex as never,
     recentMeals: u.foodEntries.map((m) => ({
       foodId: m.foodId, portionType: m.portionType as never, portionValue: m.portionValue,
       grams: m.grams, loggedAt: m.loggedAt.getTime(),

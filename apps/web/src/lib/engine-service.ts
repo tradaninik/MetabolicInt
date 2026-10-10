@@ -1,5 +1,5 @@
 // Server-side glue: load a user's profile + history from Prisma, run the engine,
-// and return dashboard-ready shapes. Pure data transformation — no React.
+// and return dashboard-ready shapes. Pure data transformation - no React.
 import { prisma } from './prisma';
 import {
   healthScore as computeHealthScore,
@@ -17,7 +17,7 @@ import {
   type WeightPoint,
   type Food,
 } from '@mi/engine';
-import { FOOD_INDEX } from '@mi/food-db';
+import { mergedFoodIndex } from './food-index';
 
 const DAY = 86_400_000;
 
@@ -37,7 +37,6 @@ export function toUserProfile(u: {
   if (typeof u.hba1c === 'number' && u.hba1c > 0) profile.hba1c = u.hba1c;
   if (typeof u.fastingGlucose === 'number' && u.fastingGlucose > 0) profile.fastingGlucose = u.fastingGlucose;
   if (typeof u.sleepHours === 'number' && u.sleepHours > 0) profile.sleepHours = u.sleepHours;
-  // Infer diabetic flag from conditions JSON if present.
   return profile;
 }
 
@@ -79,12 +78,15 @@ export async function loadDashboardData(userId: string): Promise<DashboardData |
   });
   if (!user) return null;
 
+  // F8: merged engine index - catalog plus this user's custom foods - so
+  // timeline labels and insights know custom food names. The engine itself
+  // stays frozen: this is still just a foodIndex parameter.
+  const foodIndex = await mergedFoodIndex(userId);
+
   const profile = toUserProfile(user);
-  // Mark diabetic if conditions include diabetes.
   const conditions: string[] = safeParse(user.conditions);
   if (conditions.some((c) => c.includes('diabetes'))) profile.diabetic = true;
 
-  // Sensitivity: prefer learned cache, else compute prior.
   let sensitivity = priorSensitivity(profile);
   let isPrior = true;
   let sampleSize = 0;
@@ -94,7 +96,6 @@ export async function loadDashboardData(userId: string): Promise<DashboardData |
     sampleSize = user.learnedModel.sampleSize;
   }
 
-  // --- Daily summary (today) ---
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
   const todaysMeals = user.foodEntries.filter((m) => m.loggedAt >= startOfToday);
@@ -111,7 +112,6 @@ export async function loadDashboardData(userId: string): Promise<DashboardData |
       .sort((a, b) => a.takenAt - b.takenAt),
   };
 
-  // --- Health score inputs ---
   const last14 = user.glucoseReadings.slice(0, 30).map((g) => g.value);
   const avgGlucose = last14.length ? sum(last14) / last14.length : undefined;
   const lastBp = user.bpEntries[0];
@@ -128,11 +128,9 @@ export async function loadDashboardData(userId: string): Promise<DashboardData |
     greenMealFraction: greenFraction,
   });
 
-  // --- Timeline (last 24h) ---
   const since = Date.now() - DAY;
-  const timeline = buildTimeline(user, since);
+  const timeline = buildTimeline(user, since, foodIndex);
 
-  // --- Series for charts ---
   const glucoseSeries = user.glucoseReadings
     .map((g) => ({ t: g.takenAt.getTime(), value: g.value }))
     .filter((p) => p.t >= since - 13 * DAY)
@@ -141,7 +139,6 @@ export async function loadDashboardData(userId: string): Promise<DashboardData |
     .map((w) => ({ t: w.takenAt.getTime(), kg: w.kg }))
     .sort((a, b) => a.t - b.t);
 
-  // --- Insights ---
   const sleep: SleepRecord[] = user.sleepEntries.map((s) => ({ hours: s.hours, wokeAt: s.wokeAt.getTime() }));
   const glucose: GlucosePoint[] = user.glucoseReadings.map((g) => ({ value: g.value, takenAt: g.takenAt.getTime() }));
   const weights: WeightPoint[] = user.weightEntries.map((w) => ({ kg: w.kg, takenAt: w.takenAt.getTime() }));
@@ -149,9 +146,8 @@ export async function loadDashboardData(userId: string): Promise<DashboardData |
     foodId: m.foodId, portionType: m.portionType as MealEntry['portionType'],
     portionValue: m.portionValue, grams: m.grams, loggedAt: m.loggedAt.getTime(),
   }));
-  const insights = discoverInsights({ sleep, glucose, meals, weights, foodIndex: FOOD_INDEX as Record<string, Food> });
+  const insights = discoverInsights({ sleep, glucose, meals, weights, foodIndex });
 
-  // --- Forecast ---
   const tdeeValue = profileTdee(profile);
   const fc = forecast(profile, {
     avgKcalIntake: Math.max(daily.kcal || 0, tdeeValue * 0.9),
@@ -177,13 +173,13 @@ export async function loadDashboardData(userId: string): Promise<DashboardData |
   };
 }
 
-function buildTimeline(user: any, since: number) {
+function buildTimeline(user: any, since: number, foodIndex: Record<string, Food>) {
   const events: DashboardData['timeline'] = [];
   for (const m of user.foodEntries) {
     const t = m.loggedAt.getTime();
     if (t < since) continue;
-    const food = FOOD_INDEX[m.foodId];
-    events.push({ t, type: 'meal', label: food?.name ?? m.foodId, text: `${Math.round(m.kcal)} kcal · ${m.carbsG}g carbs` });
+    const food = foodIndex[m.foodId];
+    events.push({ t, type: 'meal', label: food?.name ?? m.foodId, text: `${Math.round(m.kcal)} kcal - ${m.carbsG}g carbs` });
   }
   for (const g of user.glucoseReadings) {
     const t = g.takenAt.getTime();
@@ -205,7 +201,6 @@ function buildTimeline(user: any, since: number) {
 }
 
 function profileTdee(p: UserProfile): number {
-  // Mifflin-St Jeor + activity factor.
   const bmr = 10 * p.weightKg + 6.25 * p.heightCm - 5 * p.age + (p.gender === 'male' ? 5 : p.gender === 'female' ? -161 : -78);
   const factor = { sedentary: 1.2, light: 1.375, moderate: 1.55, active: 1.725, very_active: 1.9 }[p.activityLevel];
   return Math.round(Math.max(0, bmr) * factor);
