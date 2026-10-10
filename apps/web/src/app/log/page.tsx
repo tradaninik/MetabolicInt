@@ -5,9 +5,10 @@ import Link from 'next/link';
 import AppShell from '@/components/AppShell';
 import PostMealFeedback from '@/components/PostMealFeedback';
 import RecentMeals from '@/components/RecentMeals';
+import AddCustomFood from '@/components/AddCustomFood'; // C2: F1 form mount
 import type { Food, GlucoseSpike } from '@mi/engine';
 import { macrosForGrams, netCarbsG, estimateGlucoseSpike } from '@mi/engine';
-import { REGION_LABELS } from '@mi/food-db';
+import { FOOD_INDEX, REGION_LABELS } from '@mi/food-db'; // C2: FOOD_INDEX for the placeholder count
 import { classifyMealType } from '@/lib/meal-bits';
 import { PLATES, getPlateItems } from '@/lib/plates';
 
@@ -74,6 +75,12 @@ export default function LogPage() {
   const [myCombos, setMyCombos] = useState<{ id: string; name: string; items: { food: Food; portionType: 'serving' | 'katori' | 'grams'; portionValue: number }[] }[]>([]);
   const [comboMsg, setComboMsg] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  // C2: custom-foods state - Mine chip, the form mount, portion memory.
+  const [mineOnly, setMineOnly] = useState(false);
+  const [showAddFood, setShowAddFood] = useState(false);
+  const [addingName, setAddingName] = useState('');
+  const [lastPortions, setLastPortions] = useState<Record<string, { portionType: 'serving' | 'katori' | 'grams'; portionValue: number }>>({});
+  const [portionHint, setPortionHint] = useState<string | null>(null);
 
   // Load user's saved combos.
   useEffect(() => {
@@ -83,7 +90,7 @@ export default function LogPage() {
       .catch(() => {});
   }, []);
 
-// Load user sensitivity for the live preview.
+  // Load user sensitivity for the live preview.
   useEffect(() => {
     fetch('/api/me/profile')
       .then((r) => (r.ok ? r.json() : null))
@@ -97,9 +104,27 @@ export default function LogPage() {
       .catch(() => {});
   }, []);
 
+  // C2 (F7 portion memory): the last portion used per food becomes the
+  // default when adding it again ("last time: 2 katori") - a default,
+  // never a demand. Entries arrive newest-first, so the first sighting of
+  // a foodId is its most recent portion.
+  useEffect(() => {
+    fetch('/api/meals')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const entries = (d?.entries ?? []) as { foodId: string; portionType: 'serving' | 'katori' | 'grams'; portionValue: number }[];
+        const map: Record<string, { portionType: 'serving' | 'katori' | 'grams'; portionValue: number }> = {};
+        for (const e of entries) {
+          if (!map[e.foodId]) map[e.foodId] = { portionType: e.portionType, portionValue: e.portionValue };
+        }
+        setLastPortions(map);
+      })
+      .catch(() => {});
+  }, []);
+
   // Debounced search / browse. Empty query + a category chip = browse that category.
   useEffect(() => {
-    if (!query.trim() && !category) {
+    if (!query.trim() && !category && !mineOnly) {
       setResults([]);
       setFallback(false);
       return;
@@ -109,13 +134,15 @@ export default function LogPage() {
       if (query.trim()) params.set('q', query.trim());
       if (region) params.set('region', region);
       if (category) params.set('category', category);
+      if (mineOnly) params.set('mine', '1'); // C2 (F6): the Mine chip
       const res = await fetch(`/api/foods?${params.toString()}`);
       if (res.ok) {
         const j = await res.json();
-        if (j.foods.length === 0 && region) {
+        if (j.foods.length === 0 && region && !mineOnly) {
           const p2 = new URLSearchParams();
           if (query.trim()) p2.set('q', query.trim());
           if (category) p2.set('category', category);
+          if (mineOnly) p2.set('mine', '1');
           const res2 = await fetch(`/api/foods?${p2.toString()}`);
           if (res2.ok) {
             const j2 = await res2.json();
@@ -129,7 +156,7 @@ export default function LogPage() {
       }
     }, 200);
     return () => clearTimeout(t);
-  }, [query, region, category]);
+  }, [query, region, category, mineOnly]);
 
   const whenMs = useMemo(() => Date.now() - whenMin * 60_000, [whenMin]);
 
@@ -260,19 +287,29 @@ export default function LogPage() {
     }
   }
 
-function addPlate(plateId: string) {
-  const plate = PLATES.find((x) => x.id === plateId);
-  if (!plate) return;
-  const items = getPlateItems(plate);
-  if (items.length === 0) return;
-  setTray(items.map((x) => ({ food: x.food, portionType: x.portionType, portionValue: x.portionValue })));
-  setSavedMsg(null);
-  setError(null);
-}
-
-function addFood(f: Food) {
+  function addPlate(plateId: string) {
+    const plate = PLATES.find((x) => x.id === plateId);
+    if (!plate) return;
+    const items = getPlateItems(plate);
+    if (items.length === 0) return;
+    setTray(items.map((x) => ({ food: x.food, portionType: x.portionType, portionValue: x.portionValue })));
     setSavedMsg(null);
     setError(null);
+  }
+
+  function addFood(f: Food) {
+    setSavedMsg(null);
+    setError(null);
+    // C2 (F7): default to this food's last-used portion when it still
+    // applies (katori only exists for foods that define one).
+    const last = lastPortions[f.id];
+    const applies = last !== undefined && (last.portionType !== 'katori' || f.katoriGrams != null);
+    if (applies && last) {
+      const unit = last.portionType === 'grams' ? 'g' : last.portionType + (last.portionValue === 1 ? '' : 's');
+      setPortionHint(`${f.name}: last time was ${last.portionValue} ${unit} - change it below if this time is different.`);
+    } else {
+      setPortionHint(null);
+    }
     setTray((t) => {
       const existing = t.findIndex((x) => x.food.id === f.id);
       if (existing >= 0) {
@@ -280,7 +317,11 @@ function addFood(f: Food) {
         copy[existing] = { ...copy[existing], portionValue: copy[existing].portionValue + 1 };
         return copy;
       }
-      return [...t, { food: f, portionType: 'serving', portionValue: 1 }];
+      return [...t, {
+        food: f,
+        portionType: applies && last ? last.portionType : 'serving',
+        portionValue: applies && last ? last.portionValue : 1,
+      }];
     });
   }
 
@@ -465,7 +506,7 @@ function addFood(f: Food) {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={category ? `Search within ${CATEGORY_CHIPS.find((c) => c.value === category)?.label ?? 'category'}...` : 'Search 139 foods - dosa, biryani, chapati, pizza...'}
+            placeholder={category ? `Search within ${CATEGORY_CHIPS.find((c) => c.value === category)?.label ?? 'category'}...` : `Search ${Object.keys(FOOD_INDEX).length} foods - dosa, biryani, chapati, pizza...`}
             className="w-full rounded-lg border border-neutral-300 bg-transparent px-4 py-3 outline-none focus:border-brand-500 dark:border-neutral-700"
           />
           <div className="mt-2 flex items-center gap-2 text-xs">
@@ -480,6 +521,15 @@ function addFood(f: Food) {
                 <option key={v} value={v}>{l}</option>
               ))}
             </select>
+            <label className="ml-2 flex cursor-pointer items-center gap-1 text-neutral-600 dark:text-neutral-400">
+              <input
+                type="checkbox"
+                checked={mineOnly}
+                onChange={(e) => setMineOnly(e.target.checked)}
+                className="accent-brand-600"
+              />
+              Mine only
+            </label>
           </div>
 
           {fallback && results.length > 0 && (
@@ -498,6 +548,11 @@ function addFood(f: Food) {
                   >
                     <span>
                       <span className="font-medium">{f.name}</span>
+                      {f.id.startsWith('custom-') && (
+                        <span className="ml-2 rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
+                          yours
+                        </span>
+                      )}
                       <span className="ml-2 text-xs text-neutral-400">{REGION_LABELS[f.region]} - GI {f.gi}</span>
                     </span>
                     <span className="text-xs font-medium text-brand-600">+ Add</span>
@@ -505,6 +560,46 @@ function addFood(f: Food) {
                 </li>
               ))}
             </ul>
+          )}
+
+          {/* C2 (F6): search-miss empty state - the quiet door into the form,
+              name prefilled from the failed query (journey J1). */}
+          {query.trim() && results.length === 0 && !fallback && !mineOnly && (
+            <div className="mt-3 rounded-lg border border-dashed border-neutral-300 p-4 dark:border-neutral-700">
+              <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                Can&apos;t find &quot;{query.trim()}&quot;? You&apos;re one field away from logging it anyway.
+              </p>
+              <button
+                type="button"
+                onClick={() => { setAddingName(query.trim()); setShowAddFood(true); }}
+                className="mt-1 text-sm font-medium text-brand-600 hover:underline dark:text-brand-400"
+              >
+                Add your own food - only the name is required
+              </button>
+            </div>
+          )}
+
+          {mineOnly && results.length === 0 && (
+            <p className="mt-3 text-sm text-neutral-500">
+              Nothing here yet - foods you create show up in search with a &quot;yours&quot; badge.
+            </p>
+          )}
+
+          {/* C2 (F1): the creation form. On save, the new food drops straight
+              into the tray - creating should feel like logging (spec 3.2). */}
+          {showAddFood && (
+            <div className="mt-4 rounded-2xl border border-neutral-200 p-4 dark:border-neutral-800">
+              <h2 className="text-lg font-semibold">Add your own food</h2>
+              <AddCustomFood
+                initial={{ name: addingName }}
+                onCreated={(f) => {
+                  setShowAddFood(false);
+                  setAddingName('');
+                  addFood(f as unknown as Food);
+                }}
+                onCancel={() => setShowAddFood(false)}
+              />
+            </div>
           )}
         </div>
 
@@ -520,6 +615,7 @@ function addFood(f: Food) {
                 Clear all
               </button>
             </div>
+            {portionHint && <p className="mt-1 text-xs text-neutral-500">{portionHint}</p>}
 
             <ul className="mt-3 space-y-3">
               {items.map((x, i) => (
@@ -628,20 +724,20 @@ function addFood(f: Food) {
             />
 
             <div className="mt-4 flex flex-wrap items-center gap-2">
-            <input
-              value={comboName}
-              onChange={(e) => setComboName(e.target.value)}
-              placeholder="Name this combo (e.g. My Lunch Plate)"
-              className="w-56 rounded-lg border border-neutral-300 bg-transparent px-3 py-2 text-xs dark:border-neutral-700"
-            />
-            <button onClick={saveCombo} disabled={tray.length === 0}
-              className="rounded-lg border border-emerald-300 px-4 py-2 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/40">
-              Save as combo
-            </button>
-            {comboMsg && <span className="text-xs text-neutral-500">{comboMsg}</span>}
-          </div>
+              <input
+                value={comboName}
+                onChange={(e) => setComboName(e.target.value)}
+                placeholder="Name this combo (e.g. My Lunch Plate)"
+                className="w-56 rounded-lg border border-neutral-300 bg-transparent px-3 py-2 text-xs dark:border-neutral-700"
+              />
+              <button onClick={saveCombo} disabled={tray.length === 0}
+                className="rounded-lg border border-emerald-300 px-4 py-2 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/40">
+                Save as combo
+              </button>
+              {comboMsg && <span className="text-xs text-neutral-500">{comboMsg}</span>}
+            </div>
 
-          {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+            {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 
             <div className="mt-4 flex gap-2">
               <button
