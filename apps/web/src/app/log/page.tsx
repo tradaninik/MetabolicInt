@@ -6,6 +6,7 @@ import AppShell from '@/components/AppShell';
 import PostMealFeedback from '@/components/PostMealFeedback';
 import RecentMeals from '@/components/RecentMeals';
 import AddCustomFood from '@/components/AddCustomFood'; // C2: F1 form mount
+import { blendRecipe } from '@/lib/recipe-blend'; // C3: F3 tray-as-food blend
 import type { Food, GlucoseSpike } from '@mi/engine';
 import { macrosForGrams, netCarbsG, estimateGlucoseSpike } from '@mi/engine';
 import { FOOD_INDEX, REGION_LABELS } from '@mi/food-db'; // C2: FOOD_INDEX for the placeholder count
@@ -77,8 +78,7 @@ export default function LogPage() {
   const fileRef = useRef<HTMLInputElement>(null);
   // C2: custom-foods state - Mine chip, the form mount, portion memory.
   const [mineOnly, setMineOnly] = useState(false);
-  const [showAddFood, setShowAddFood] = useState(false);
-  const [addingName, setAddingName] = useState('');
+  const [addFoodPanel, setAddFoodPanel] = useState<{ mode: 'search' | 'recipe'; initial: Record<string, unknown> } | null>(null);
   const [lastPortions, setLastPortions] = useState<Record<string, { portionType: 'serving' | 'katori' | 'grams'; portionValue: number }>>({});
   const [portionHint, setPortionHint] = useState<string | null>(null);
 
@@ -325,6 +325,19 @@ export default function LogPage() {
     });
   }
 
+  // C3 (F3): turn the current tray into ONE blended food. Macros are
+  // gram-weighted per 100g, GI is net-carb weighted exactly like the tray
+  // preview (lib/recipe-blend), servingGrams defaults to the tray total,
+  // and kcal stays blank so the server applies its Atwater rule.
+  function saveTrayAsFood() {
+    if (items.length === 0) return;
+    const b = blendRecipe(items.map((x) => ({
+      grams: x.grams, netCarbsG: x.nc, gi: x.it.food.gi,
+      carbsPer100g: x.it.food.carbsPer100g, proteinPer100g: x.it.food.proteinPer100g,
+      fatPer100g: x.it.food.fatPer100g, fiberPer100g: x.it.food.fiberPer100g,
+    })));
+    setAddFoodPanel({ mode: 'recipe', initial: { name: trayLabel(), ...b } });
+  }
   function updateItem(i: number, patch: Partial<TrayItem>) {
     setTray((t) => t.map((x, idx) => (idx === i ? { ...x, ...patch } : x)));
   }
@@ -564,14 +577,14 @@ export default function LogPage() {
 
           {/* C2 (F6): search-miss empty state - the quiet door into the form,
               name prefilled from the failed query (journey J1). */}
-          {query.trim() && results.length === 0 && !fallback && !mineOnly && (
+          {query.trim() && results.length === 0 && !mineOnly && (
             <div className="mt-3 rounded-lg border border-dashed border-neutral-300 p-4 dark:border-neutral-700">
               <p className="text-sm text-neutral-600 dark:text-neutral-400">
                 Can&apos;t find &quot;{query.trim()}&quot;? You&apos;re one field away from logging it anyway.
               </p>
               <button
                 type="button"
-                onClick={() => { setAddingName(query.trim()); setShowAddFood(true); }}
+                onClick={() => { setAddFoodPanel({ mode: 'search', initial: { name: query.trim() } }); }}
                 className="mt-1 text-sm font-medium text-brand-600 hover:underline dark:text-brand-400"
               >
                 Add your own food - only the name is required
@@ -587,17 +600,23 @@ export default function LogPage() {
 
           {/* C2 (F1): the creation form. On save, the new food drops straight
               into the tray - creating should feel like logging (spec 3.2). */}
-          {showAddFood && (
+          {addFoodPanel && (
             <div className="mt-4 rounded-2xl border border-neutral-200 p-4 dark:border-neutral-800">
-              <h2 className="text-lg font-semibold">Add your own food</h2>
+              <h2 className="text-lg font-semibold">{addFoodPanel.mode === 'recipe' ? 'Save this tray as one food' : 'Add your own food'}</h2>
+              
               <AddCustomFood
-                initial={{ name: addingName }}
+                initial={addFoodPanel.initial}
                 onCreated={(f) => {
-                  setShowAddFood(false);
-                  setAddingName('');
-                  addFood(f as unknown as Food);
+                  const mode = addFoodPanel.mode;
+                  setAddFoodPanel(null);
+                  if (mode === 'recipe') {
+                    // The blend replaces the tray: one plate, one item (J3).
+                    setTray([{ food: f as unknown as Food, portionType: 'serving', portionValue: 1 }]);
+                  } else {
+                    addFood(f as unknown as Food);
+                  }
                 }}
-                onCancel={() => setShowAddFood(false)}
+                onCancel={() => setAddFoodPanel(null)}
               />
             </div>
           )}
@@ -734,7 +753,11 @@ export default function LogPage() {
                 className="rounded-lg border border-emerald-300 px-4 py-2 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/40">
                 Save as combo
               </button>
-              {comboMsg && <span className="text-xs text-neutral-500">{comboMsg}</span>}
+              <button onClick={saveTrayAsFood} disabled={tray.length === 0}
+                className="rounded-lg border border-brand-300 px-4 py-2 text-xs font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-50 dark:border-brand-800 dark:text-brand-300 dark:hover:bg-brand-950/40"
+              >
+                Save as food
+              </button>              {comboMsg && <span className="text-xs text-neutral-500">{comboMsg}</span>}
             </div>
 
             {error && <p className="mt-3 text-sm text-red-600">{error}</p>}

@@ -1,10 +1,11 @@
 'use client';
-// F1: the core creation form. Only the name is required (promptless law);
-// every other field stays blank and the server fills it in (Atwater kcal,
-// GI band default, category/region). C3 adds the label paste-parser and
-// the fork-from-catalog mini-search to this component.
+// C3: the accelerators join the core form (C2) - the packet-label
+// paste-parser (F2) and the fork-from-catalog mini-search (F4). The tray's
+// "Save as food" button (F3) opens this same component in recipe mode: the
+// page computes blended numbers and passes them via `initial`.
 import { useState } from 'react';
 import { GI_BANDS, GI_DEFAULT, atwaterKcal } from '@/lib/food-validation';
+import { parseNutritionLabel } from '@/lib/label-parser';
 
 export interface CustomFoodCreated { id: string; name: string; [k: string]: unknown; }
 
@@ -16,6 +17,15 @@ interface Props {
 
 const num = (v: string) => (v.trim() === '' ? undefined : v.trim());
 
+/** Aliases arrive as string[] (engine foods) or a JSON string (prisma rows). */
+function aliasesToForm(a: unknown): string {
+  if (Array.isArray(a)) return a.join(',');
+  if (typeof a === 'string' && a) {
+    try { const v = JSON.parse(a); return Array.isArray(v) ? v.join(',') : ''; } catch { return ''; }
+  }
+  return '';
+}
+
 export default function AddCustomFood({ initial, onCreated, onCancel }: Props) {
   const g = (k: string, d = '') => String(initial?.[k] ?? d);
   const [name, setName] = useState(g('name'));
@@ -25,16 +35,55 @@ export default function AddCustomFood({ initial, onCreated, onCancel }: Props) {
   const [fiber, setFiber] = useState(g('fiberPer100g'));
   const [kcal, setKcal] = useState(g('kcalPer100g'));
   const [gi, setGi] = useState(Number(initial?.gi ?? GI_DEFAULT));
-  const [aliases, setAliases] = useState(Array.isArray(initial?.aliases) ? (initial?.aliases as string[]).join(',') : '');
+  const [aliases, setAliases] = useState(aliasesToForm(initial?.aliases));
   const [serving, setServing] = useState(g('servingGrams'));
+  // Carried through from a fork (a forked dosa keeps its katori portion) but
+  // not shown as a field - smallest surface, no fidelity loss.
+  const [katori, setKatori] = useState(g('katoriGrams'));
+  const [label, setLabel] = useState('');
+  const [notes, setNotes] = useState<string[]>([]);
+  const [forkQ, setForkQ] = useState('');
+  const [forkHits, setForkHits] = useState<{ id: string; name: string; [k: string]: unknown }[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [banner, setBanner] = useState('');
   const [busy, setBusy] = useState(false);
 
-  // Live Atwater hint: what the server will store if kcal stays blank.
   const impliedKcal = [carbs, protein, fat].every((v) => v === '' || !isNaN(Number(v)))
     ? atwaterKcal(Number(carbs || 0), Number(protein || 0), Number(fat || 0))
     : null;
+
+  // F2: parse the pasted label, rescaled to per-100g by the lib.
+  function applyParsed() {
+    const p = parseNutritionLabel(label);
+    if (p.carbsPer100g !== undefined) setCarbs(String(p.carbsPer100g));
+    if (p.proteinPer100g !== undefined) setProtein(String(p.proteinPer100g));
+    if (p.fatPer100g !== undefined) setFat(String(p.fatPer100g));
+    if (p.fiberPer100g !== undefined) setFiber(String(p.fiberPer100g));
+    if (p.kcalPer100g !== undefined) setKcal(String(p.kcalPer100g));
+    setNotes(p.notes);
+  }
+
+  // F4: mini-search over /api/foods (catalog + mine).
+  async function runFork() {
+    if (!forkQ.trim()) return;
+    const res = await fetch(`/api/foods?q=${encodeURIComponent(forkQ.trim())}`);
+    const data = await res.json().catch(() => ({ foods: [] }));
+    setForkHits((data.foods ?? []).slice(0, 8));
+  }
+
+  function prefillFrom(f: Record<string, unknown>) {
+    setName(String(f.name ?? ''));
+    setCarbs(String(f.carbsPer100g ?? ''));
+    setProtein(String(f.proteinPer100g ?? ''));
+    setFat(String(f.fatPer100g ?? ''));
+    setFiber(String(f.fiberPer100g ?? ''));
+    setKcal(String(f.kcalPer100g ?? ''));
+    setGi(Number(f.gi ?? GI_DEFAULT));
+    setServing(String(f.servingGrams ?? ''));
+    setAliases(aliasesToForm(f.aliases));
+    setKatori(f.katoriGrams != null ? String(f.katoriGrams) : '');
+    setForkHits([]);
+  }
 
   async function save() {
     setBusy(true); setErrors({}); setBanner('');
@@ -42,6 +91,7 @@ export default function AddCustomFood({ initial, onCreated, onCancel }: Props) {
     for (const [k, v] of Object.entries({
       carbsPer100g: num(carbs), proteinPer100g: num(protein), fatPer100g: num(fat),
       fiberPer100g: num(fiber), kcalPer100g: num(kcal), servingGrams: num(serving),
+      katoriGrams: num(katori),
     })) if (v !== undefined) body[k] = v;
     if (aliases.trim()) body.aliases = aliases;
     const res = await fetch('/api/foods/custom', {
@@ -61,6 +111,35 @@ export default function AddCustomFood({ initial, onCreated, onCancel }: Props) {
     <div className="space-y-3">
       <input className={input} placeholder="Food name (the only required field)" value={name} onChange={(e) => setName(e.target.value)} />
       {errors.name && <p className="text-sm text-red-600">{errors.name}</p>}
+
+      <details className="rounded-lg border border-neutral-200 dark:border-neutral-800">
+        <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-neutral-600 dark:text-neutral-400">Paste a packet label</summary>
+        <div className="space-y-2 p-3">
+          <textarea className={input} rows={2} value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Per 30g - Energy 150 kcal, Carbohydrate 20g, Protein 4g, Fat 5g, Dietary Fibre 2g" />
+          <button type="button" onClick={applyParsed} className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-medium dark:border-neutral-700">Parse label</button>
+          {notes.map((n) => <p key={n} className="text-xs text-amber-700 dark:text-amber-400">{n}</p>)}
+        </div>
+      </details>
+
+      <details className="rounded-lg border border-neutral-200 dark:border-neutral-800">
+        <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-neutral-600 dark:text-neutral-400">Start from an existing food</summary>
+        <div className="space-y-2 p-3">
+          <div className="flex gap-2">
+            <input className={input} value={forkQ} onChange={(e) => setForkQ(e.target.value)} placeholder="Search the catalog - dosa, upma..." />
+            <button type="button" onClick={runFork} className="shrink-0 rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-medium dark:border-neutral-700">Find</button>
+          </div>
+          <ul className="space-y-1">
+            {forkHits.map((f) => (
+              <li key={f.id}>
+                <button type="button" onClick={() => prefillFrom(f)} className="text-sm text-brand-600 hover:underline dark:text-brand-400">
+                  {String(f.name)}{f.id.startsWith('custom-') ? ' (yours)' : ''}
+                </button>
+              </li>
+            ))}
+          </ul>
+          <p className="text-[11px] text-neutral-500">Prefills the form - tweak anything and save as your own.</p>
+        </div>
+      </details>
 
       <div className="grid grid-cols-2 gap-2 text-sm">
         <label>Carbs /100g<input className={input} inputMode="decimal" value={carbs} onChange={(e) => setCarbs(e.target.value)} /></label>
