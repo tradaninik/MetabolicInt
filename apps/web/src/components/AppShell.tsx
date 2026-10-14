@@ -7,6 +7,7 @@ import { signOut, useSession } from 'next-auth/react';
 const NAV = [
   { href: '/dashboard', label: 'Dashboard' },
   { href: '/log', label: 'Log a meal' },
+  { href: '/my-foods', label: 'My Foods' },
   { href: '/coach', label: 'AI Coach' },
   { href: '/insights', label: 'Insights' },
   { href: '/indian', label: 'Indian MI' },

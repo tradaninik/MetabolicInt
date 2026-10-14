@@ -101,7 +101,7 @@ export default function AddCustomFood({ initial, onCreated, onCancel }: Props) {
     });
     const data = await res.json().catch(() => ({}));
     setBusy(false);
-    if (res.ok) { onCreated(data.food); return; }
+    if (res.ok) { setLabel(''); setNotes([]); onCreated(data.food); return; }
     if (res.status === 400 && data.errors) setErrors(data.errors);
     else setBanner(data.error ?? 'Could not save this food.');
   }
@@ -115,7 +115,7 @@ export default function AddCustomFood({ initial, onCreated, onCancel }: Props) {
       <details className="rounded-lg border border-neutral-200 dark:border-neutral-800">
         <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-neutral-600 dark:text-neutral-400">Paste a packet label</summary>
         <div className="space-y-2 p-3">
-          <textarea className={input} rows={2} value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Per 30g - Energy 150 kcal, Carbohydrate 20g, Protein 4g, Fat 5g, Dietary Fibre 2g" />
+          <textarea className={input} rows={2} value={label} onChange={(e) => setLabel(e.target.value)} onPaste={(e) => { const text = e.clipboardData.getData('text'); if (text) { e.preventDefault(); setLabel(text); const p = parseNutritionLabel(text); if (p.carbsPer100g !== undefined) setCarbs(String(p.carbsPer100g)); if (p.proteinPer100g !== undefined) setProtein(String(p.proteinPer100g)); if (p.fatPer100g !== undefined) setFat(String(p.fatPer100g)); if (p.fiberPer100g !== undefined) setFiber(String(p.fiberPer100g)); if (p.kcalPer100g !== undefined) setKcal(String(p.kcalPer100g)); setNotes(p.notes); } }} placeholder="Per 30g - Energy 150 kcal, Carbohydrate 20g, Protein 4g, Fat 5g, Dietary Fibre 2g" />
           <button type="button" onClick={applyParsed} className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-medium dark:border-neutral-700">Parse label</button>
           {notes.map((n) => <p key={n} className="text-xs text-amber-700 dark:text-amber-400">{n}</p>)}
         </div>
