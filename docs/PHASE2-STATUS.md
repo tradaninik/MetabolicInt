@@ -22,14 +22,44 @@ and predictions move off the population prior as data accumulates.
 - f5c1188  Food search region fallback (e.g. biryani findable from any default region)
 - 4885d81  Hardened activity route input validation
 - test:    Automated live-deployment smoke harness (scripts/qa-smoke.mjs)
-
-All of the above verified: engine suite 67/67, production builds green, deployments
-Ready, live-Turso inspection of the derivation pipeline.
-
-## In final verification (code complete, going through release gates)
 - Meal tray: multi-item meals, combined prediction, engine-computed what-if options
-  (half portion / 15-min walk), back-time entry, category browsing, day-so-far summary
-- Edit/delete of logged entries with automatic model refit
+  (half portion / 15-min walk), back-time entry, category browsing, day-so-far
+  summary (promoted from final verification - live and in daily use)
+- Edit/delete of logged entries with automatic model refit (likewise promoted)
+
+### Custom foods v2 - shipped (docs/CUSTOM-FOODS-V2.md, C1-C6)
+Anything from the user's kitchen becomes a first-class, searchable, model-aware
+food - created in under 30 seconds, private to its creator (invisible to other
+members; foreign logging returns 404).
+- d6ed30e  Per-user merged food index (engine stays frozen: app-side merge)
+- 1f3af1d  C1 server core: CRUD /api/foods/custom with spec-section-5 validation
+           (name-only creates, Atwater kcal, GI floor 1, 100-food cap, own-name 409,
+           reference-counted 409 deletes), /api/foods owner-scoped visibility +
+           mine=1 + mine-first ranking, /api/meals foreign-id 404, dashboard and
+           coach answers on the merged index
+- 2496de0  C2 form + search UX: empty state with failed-query prefill, yours badge,
+           Mine chip, live placeholder count, portion memory ("last time: 2 katori")
+- e13bad6  C3 accelerators: packet-label paste-parser (per-Xg rescale, kJ), fork
+           from catalog, tray-as-food blending (lib/recipe-blend.ts - GI weighting
+           mirrors the tray preview exactly)
+- da3127a  C4 My Foods manager (/my-foods + nav): edit, delete with plain-language
+           409 reasons, logged counts; auto-parse on paste; label cleared on save
+- d2338ce  C5 smoke checks 13-21 (cross-user privacy verified) + local QA seed user
+Verified: vitest 99/99 (engine's 67 unchanged), builds green, production smoke 9/9
+against the live deployment.
+
+Deviations from spec (pre-approved rulings):
+- Validation lives in lib/food-validation.ts, not inline in the route - shared
+  with the form (GI_BANDS) and unit-tested directly.
+- Category/region unions hardcoded from packages/engine/src/types.ts: the catalog
+  spans 12 of 13 categories (no nut foods), so deriving from FOOD_INDEX would
+  reject valid customs.
+- Atwater-implied kcal above 900 is rejected with an explanation, not stored.
+- qa-smoke-custom.mjs ships standalone rather than merged into qa-smoke.mjs.
+
+Test baseline: 99/99 across 13 files - engine 67, food-db 8, food-index 7,
+food-validation 16, label-parser 4, recipe-blend 5. Gate per commit: vitest +
+build + browser checklist; production verified via the smoke suite.
 
 ## Safety and compliance posture
 - Educational positioning throughout: every prediction/coach surface carries the
@@ -43,6 +73,10 @@ Ready, live-Turso inspection of the derivation pipeline.
 ## Next phases
 - Phase 2c (schema, migration-gated): lab results with HbA1c-eAG trend view and
   doctor-questions list, day-context tags ("why this spike?" attribution), medication
-  logging (adherence % only), user target ranges, custom foods
+  logging (adherence % only), user target ranges
 - Phase 2d: weekly review ritual, consistency score with grace days, education card
   library (food sequencing, post-meal walks, festival playbook), waist/WHtR emphasis
+- Under consideration (v2.1, user-driven): persistent 2h check-in reminders with
+  one-tap glucose logging (highest model-data leverage), settings page (profile and
+  region editing; future home for DPDP export/delete), streaks/achievements surface,
+  visual depth pass. True 3D visualization remains a spec-first decision.
