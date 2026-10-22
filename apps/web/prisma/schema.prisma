@@ -83,6 +83,10 @@ model User {
   bpEntries         BloodPressureEntry[]
   learnedModel      UserLearnedModel?
   savedCombos      SavedCombo[]
+  settings         UserSettings?
+  labs             Lab[]
+  meds      Medication[]
+  dayTags          DayContextTag[]
   insights          InsightCard[]
   coachThreads      CoachThread[]
 
@@ -272,4 +276,83 @@ model SavedCombo {
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+}
+/// Phase 2c: display-unit + target-range settings. Null target columns = still on
+/// educational defaults (app-side); a doctor's targets always take precedence.
+model UserSettings {
+  id                 String   @id @default(cuid())
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId             String   @unique
+  glucoseUnit        String   @default("mg/dL") // 'mg/dL' | 'mmol/L'
+  tFastingLow        Float?
+  tFastingHigh       Float?
+  tPremealLow        Float?
+  tPremealHigh       Float?
+  tPostprandialLow   Float?
+  tPostprandialHigh  Float?
+  tBedtimeLow        Float?
+  tBedtimeHigh       Float?
+  updatedAt          DateTime @updatedAt
+}
+
+/// Phase 2c: lab results. HbA1c first; a1cPercent is canonical regardless of entry unit.
+model Lab {
+  id          String   @id @default(cuid())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  testType    String   // 'hba1c' (extensible)
+  value       Float
+  unit        String   // '%' | 'mmol/mol'
+  a1cPercent  Float
+  performedAt String   // YYYY-MM-DD
+  labName     String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId, testType, performedAt])
+}
+
+/// Phase 2c: medications — adherence display only.
+/// Deliberately NO dose/strength/notes fields anywhere (safety posture, blueprint §8).
+model Medication {
+  id            String          @id @default(cuid())
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String
+  name          String
+  scheduleTimes String          // JSON array of "HH:MM"
+  isActive      Boolean         @default(true)
+  deactivatedAt DateTime?
+  createdAt     DateTime        @default(now())
+  logs          MedicationLog[]
+
+  @@index([userId])
+}
+
+/// Phase 2c: per-slot taken/skipped records. 'Skipped' stays scheduled-but-untaken;
+/// undo deletes the row.
+model MedicationLog {
+  id           String     @id @default(cuid())
+  medication   Medication @relation(fields: [medicationId], references: [id], onDelete: Cascade)
+  medicationId String
+  userId       String     // denormalized for owner-scoped queries (pattern: Food.createdByUserId)
+  logDate      String     // YYYY-MM-DD
+  slotTime     String     // HH:MM
+  status       String     // 'taken' | 'skipped'
+  createdAt    DateTime   @default(now())
+
+  @@unique([medicationId, logDate, slotTime])
+  @@index([userId, logDate])
+}
+
+/// Phase 2c: day-context tags — associations from the user's notes, never causes.
+model DayContextTag {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  tagDate   String   // YYYY-MM-DD
+  tag       String   // enum enforced app-side
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@unique([userId, tagDate, tag])
+  @@index([userId, tagDate])
 }

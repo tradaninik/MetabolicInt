@@ -1,9 +1,11 @@
-import { getServerSession } from 'next-auth';
+﻿import { getServerSession } from 'next-auth';
 import { redirect } from 'next/navigation';
 import { authOptions } from '@/lib/auth';
 import { loadDashboardData } from '@/lib/engine-service';
 import AppShell from '@/components/AppShell';
 import ReportPrint from '@/components/ReportPrint';
+import VisitSummary from '@/components/VisitSummary';
+import DoctorQuestions from '@/components/DoctorQuestions';
 
 export default async function ReportsPage() {
   const session = await getServerSession(authOptions);
@@ -19,7 +21,10 @@ export default async function ReportsPage() {
 
         <div className="mt-6 flex flex-wrap gap-3">
           <a href="/api/reports?format=csv" className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
-            ⬇ Download CSV (Excel)
+            â¬‡ Download CSV (Excel)
+          </a>
+          <a href="/api/export?format=json" className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900">
+            Download full backup (JSON)
           </a>
           <ReportPrint />
         </div>
@@ -44,8 +49,10 @@ export default async function ReportsPage() {
             ))}
           </div>
           <div className="mt-4 text-xs text-neutral-500">
-            Sensitivity: {data.sensitivity.toFixed(2)} mg/dL per g carb · {data.isPrior ? 'prior estimate' : `learned from ${data.sampleSize} meals`}
+            Sensitivity: {data.sensitivity.toFixed(2)} mg/dL per g carb Â· {data.isPrior ? 'prior estimate' : `learned from ${data.sampleSize} meals`}
           </div>
+          <VisitSummary userId={session.user.id} />
+          <DoctorQuestions />
           <p className="mt-4 border-t border-neutral-200 pt-4 text-[11px] text-neutral-400 dark:border-neutral-800">
             Educational report, not a medical document. Consult a clinician for treatment decisions.
           </p>
@@ -54,3 +61,4 @@ export default async function ReportsPage() {
     </AppShell>
   );
 }
+

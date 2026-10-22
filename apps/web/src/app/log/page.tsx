@@ -5,6 +5,7 @@ import Link from 'next/link';
 import AppShell from '@/components/AppShell';
 import PostMealFeedback from '@/components/PostMealFeedback';
 import RecentMeals from '@/components/RecentMeals';
+import DayTagPicker from '@/components/DayTagPicker'; // Phase 2c: day-context tags
 import AddCustomFood from '@/components/AddCustomFood'; // C2: F1 form mount
 import { blendRecipe } from '@/lib/recipe-blend'; // C3: F3 tray-as-food blend
 import type { Food, GlucoseSpike } from '@mi/engine';
@@ -782,6 +783,7 @@ export default function LogPage() {
 
         {postMeal && <PostMealFeedback meal={postMeal} onDismiss={() => setPostMeal(null)} />}
 
+        <DayTagPicker />
         <RecentMeals />
 
         {savedMsg && (

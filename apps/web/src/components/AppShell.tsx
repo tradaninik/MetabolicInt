@@ -12,10 +12,13 @@ const NAV = [
   { href: '/insights', label: 'Insights' },
   { href: '/indian', label: 'Indian MI' },
   { href: '/glucose', label: 'Glucose' },
+  { href: '/labs', label: 'Labs' },
+  { href: '/meds', label: 'Meds' },
   { href: '/predict', label: 'Predict' },
   { href: '/family', label: 'Family' },
   { href: '/doctor', label: 'Doctor' },
   { href: '/reports', label: 'Reports' },
+  { href: '/settings', label: 'Settings' },
   { href: '/admin', label: 'Admin' },
 ];
 

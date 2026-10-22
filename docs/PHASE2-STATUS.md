@@ -45,7 +45,8 @@ members; foreign logging returns 404).
 - da3127a  C4 My Foods manager (/my-foods + nav): edit, delete with plain-language
            409 reasons, logged counts; auto-parse on paste; label cleared on save
 - d2338ce  C5 smoke checks 13-21 (cross-user privacy verified) + local QA seed user
-Verified: vitest 99/99 (engine's 67 unchanged), builds green, production smoke 9/9
+- bb90d33  C6 closure: 40195d9 landed the tools only; bb90d33 landed the closure docs (C1-C6 all closed)
+Verified: vitest 99/99 (packages 67 unchanged: engine 59 + food-db 8), builds green, production smoke 9/9
 against the live deployment.
 
 Deviations from spec (pre-approved rulings):
@@ -57,7 +58,7 @@ Deviations from spec (pre-approved rulings):
 - Atwater-implied kcal above 900 is rejected with an explanation, not stored.
 - qa-smoke-custom.mjs ships standalone rather than merged into qa-smoke.mjs.
 
-Test baseline: 99/99 across 13 files - engine 67, food-db 8, food-index 7,
+Test baseline: 99/99 across 13 files - engine 59, food-db 8, food-index 7,
 food-validation 16, label-parser 4, recipe-blend 5. Gate per commit: vitest +
 build + browser checklist; production verified via the smoke suite.
 

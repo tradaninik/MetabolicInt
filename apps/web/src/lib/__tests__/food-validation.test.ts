@@ -105,7 +105,7 @@ describe('validateCustomFood', () => {
   it('rejects macros implying more than 900 kcal/100g via Atwater', () => {
     const r = validateCustomFood({ name: 'Test', carbsPer100g: 100, proteinPer100g: 100, fatPer100g: 100 }, base);
     expect(r.ok).toBe(false);
-    if (!r.ok) return;
+    if (r.ok) return; // unexpected success - bail before the error shape
     expect(r.errors.kcalPer100g).toBeDefined();
   });
 
