@@ -16,6 +16,8 @@ export * from './coach';
 export * from './units';
 export * from './hba1c';
 export * from './adherence';
+export * from './prakriti';
+export * from './ritucharya';
 
 export const ENGINE_VERSION = '0.1.0';
 export * from './glucoseGuard';

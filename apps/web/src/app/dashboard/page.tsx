@@ -10,6 +10,7 @@ import { REGION_LABELS } from '@mi/food-db';
 import { getPendingCheckIns } from '@/lib/pairing';
 import CheckInCard from '@/components/CheckInCard';
 import QuickAdd from '@/components/QuickAdd';
+import SeasonalCard from '@/components/SeasonalCard';
 
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
@@ -173,6 +174,9 @@ export default async function DashboardPage() {
             </div>
           </Card>
         </div>
+
+        {/* Seasonal guidance (U14 Ritucharya) */}
+        <SeasonalCard />
 
         {/* Health timeline */}
         <Card title="Health timeline" subtitle="Last 24 hours" className="mt-4">

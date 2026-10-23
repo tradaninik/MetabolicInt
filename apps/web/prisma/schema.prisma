@@ -99,6 +99,7 @@ model User {
   patientDoctors    DoctorPatientLink[] @relation("Patient")
 
   achievements      Achievement[]
+  prakritiProfiles  PrakritiProfile[]
 }
 
 model UserLearnedModel {
@@ -355,4 +356,18 @@ model DayContextTag {
 
   @@unique([userId, tagDate, tag])
   @@index([userId, tagDate])
+}
+model PrakritiProfile {
+  id             String   @id @default(cuid())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         String
+  answersJson    String   // JSON: { questionId: doshaTag }
+  vataScore      Int
+  pittaScore     Int
+  kaphaScore     Int
+  primaryDosha   String
+  secondaryDosha String
+  takenAt        DateTime @default(now())
+
+  @@index([userId, takenAt])
 }
