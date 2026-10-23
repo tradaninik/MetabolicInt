@@ -20,3 +20,16 @@
 - UI: GlucoseGuardBanner (red <54, amber 54-69) on /glucose latest reading + after each save in GlucoseLogger.
 - Drive-by fix: apps/web/src/app/glucose/page.tsx had lass30 typo (ReferenceError crashing the /glucose page) - corrected to last30.
 - Smoke: POST 65->level1, 50->level2, 5->400, 105->none; /glucose page returns 200 again.
+
+## 2026-10-23 - P4b deployed (commit c62c582)
+
+- Shipped U11 Prakriti quiz + U14 Ritucharya seasonal guidance (Know Your Body).
+- Engine + tests verified locally (esbuild + harness) before delivery; 11 files / 81 engine tests, 175 total.
+- Prod Turso migration 0004 applied; Prisma client types regenerated after stale-client build failure.
+- Commit initially missed the dashboard patch; amended to c62c582 before push.
+- Prod smoke: /prakriti 404 -> 200 after Vercel deploy; API GET/POST guard 401 with Unauthorized body.
+- Browser E2E: quiz submit + dosha result + dashboard SeasonalCard confirmed.
+- Prod 500 root cause: prod Turso DB missing 0004 tables (no such table main.PrakritiProfile); db:migrate:status first hit LibsqlError SERVER_ERROR HTTP 404 from a stale Turso token - fresh dashboard token captured via clipboard-watch (never printed) unblocked it; 0004 applied (2 statements), 22 -> 23 tables, tracker 0001-0004 green.
+- Signed-in E2E re-verified on prod: {"profile":null} -> quiz -> dosha percentages -> persisted profile on re-GET; SeasonalCard confirmed (Sharad - autumn; initially missed below the charts fold).
+- Nav follow-up: /prakriti added to AppShell NAV (desktop + mobile) in commit 76d4fed.
+- libsql-probe.mjs committed under apps/web/scripts as a reusable read-only DB diagnostic.

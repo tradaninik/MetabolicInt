@@ -20,3 +20,17 @@
 - UI: GlucoseGuardBanner (red <54, amber 54-69) on /glucose latest reading + after each save in GlucoseLogger.
 - Drive-by fix: apps/web/src/app/glucose/page.tsx had lass30 typo (ReferenceError crashing the /glucose page) - corrected to last30.
 - Smoke: POST 65->level1, 50->level2, 5->400, 105->none; /glucose page returns 200 again.
+
+<!-- P4b:shipped -->
+## P4b - Know Your Body (U11 Prakriti + U14 Ritucharya) - shipped 2026-10-23
+
+- Commit c62c582 "feat(P4b): U11 prakriti quiz + U14 ritucharya seasonal guidance" (13 files, +1224/-1)
+- Engine: packages/engine prakriti.ts (12-question scoring, integer-only largest-remainder, pinned tie-break vata > pitta > kapha) + ritucharya.ts seasonal guidance; new tests 6 + 8
+- Test suite: 11 engine files / 81 tests green; full repo 22 files / 175 tests green
+- DB: migration 0004_phase4b_know_your_body applied to prod Turso; Prisma client regenerated
+- API: /api/ayurveda/prakriti (GET latest, POST submit) with session auth guard - 401 verified on prod
+- UI: /prakriti quiz page, PrakritiQuiz component, SeasonalCard on dashboard
+- Deploy: origin/main c62c582 -> Vercel prod; smoke green (/, /login, /prakriti = 200; API guard 401); browser E2E confirmed
+- Follow-up: prod 500 on signed-in GET /api/ayurveda/prakriti - root cause: prod Turso lacked 0004 tables (SQLITE_UNKNOWN: no such table main.PrakritiProfile); migration 0004 applied via db:migrate:prod (tracker 0001-0004 green, 22 -> 23 tables incl. PrakritiProfile).
+- Signed-in E2E on prod: API {"profile":null}; quiz submit -> dosha percentages; re-GET returns persisted profile; SeasonalCard (Sharad - autumn) visible on /dashboard.
+- Nav follow-up: /prakriti added to AppShell NAV (desktop sidebar + mobile nav) in commit 76d4fed.
