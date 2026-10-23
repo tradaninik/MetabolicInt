@@ -7,6 +7,8 @@ import { GlucoseChart } from '@/components/dashboard/Charts';
 import GlucoseLogger from '@/components/GlucoseLogger';
 import CheckInCard from '@/components/CheckInCard';
 import { getPendingCheckIns } from '@/lib/pairing';
+import { evaluateGlucoseGuard } from '@mi/engine';
+import GlucoseGuardBanner from '@/components/GlucoseGuardBanner';
 
 export default async function GlucosePage() {
   const session = await getServerSession(authOptions);
@@ -20,6 +22,15 @@ export default async function GlucosePage() {
   });
   if (!u) redirect('/onboarding');
   const pendingCheckIns = await getPendingCheckIns(session.user.id);
+  // U25 guardrails: evaluate the latest reading (educational, computed on read).
+  const latestReading = u.glucoseReadings[0] ?? null;
+  const latestGuard = latestReading
+    ? evaluateGlucoseGuard(
+        latestReading.value,
+        u.glucoseReadings.slice(1).map((g) => ({ mgdl: g.value, at: g.takenAt })),
+        latestReading.takenAt,
+      )
+    : null;
   const isPrior = u.learnedModel ? u.learnedModel.isPrior : true;
   const sampleSize = u.learnedModel ? u.learnedModel.sampleSize : 0;
 
@@ -35,6 +46,7 @@ export default async function GlucosePage() {
     <AppShell>
       <div className="mx-auto max-w-4xl">
         <h1 className="text-2xl font-semibold tracking-tight">Glucose Intelligence</h1>
+        <GlucoseGuardBanner guard={latestGuard} />
         <p className="mt-1 text-sm text-neutral-500">
           Manual readings now · CGM sync is an integration slot for later.
         </p>

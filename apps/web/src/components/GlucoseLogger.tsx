@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import GlucoseGuardBanner from '@/components/GlucoseGuardBanner';
 
 function istTime(): string {
   return new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit', hour12: true }).format(new Date());
@@ -12,6 +13,7 @@ export default function GlucoseLogger() {
   const [value, setValue] = useState('');
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [guard, setGuard] = useState<{ verdict: string; pattern: boolean } | null>(null);
 
   async function save() {
     const v = Number(value);
@@ -24,6 +26,8 @@ export default function GlucoseLogger() {
     });
     setLoading(false);
     if (res.ok) {
+      const data: { guard?: { verdict: string; pattern: boolean } | null } | null = await res.json().catch(() => null);
+      setGuard(data?.guard ?? null);
       setMsg(`Logged ${v} mg/dL at ${istTime()}.`);
       setValue('');
       router.refresh();
@@ -46,6 +50,7 @@ export default function GlucoseLogger() {
           {loading ? 'Saving…' : 'Save reading'}
         </button>
       </div>
+            <GlucoseGuardBanner guard={guard} />
       {msg && <p className="mt-2 text-xs text-neutral-500">{msg}</p>}
     </div>
   );
