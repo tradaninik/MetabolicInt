@@ -1,13 +1,19 @@
 ﻿import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import {
   backupFilename,
   backupTimestamp,
   buildJsonExport,
   csvCell,
   kebabCase,
+  neutralizeFormula,
   redactSecrets,
   toCsv,
 } from '../export-format';
+
+const src = (rel: string) =>
+  readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
 describe('csvCell', () => {
   it('passes plain scalars through', () => {
     expect(csvCell('rice')).toBe('rice');
@@ -35,6 +41,79 @@ describe('csvCell', () => {
     expect(csvCell('cr\rbreak')).toBe('"cr\rbreak"');
   });
 });
+describe('neutralizeFormula (OWASP CSV injection)', () => {
+  it('prefixes an apostrophe to cells that start like formulas', () => {
+    expect(neutralizeFormula('=SUM(A1:A2)')).toBe("'=SUM(A1:A2)");
+    expect(neutralizeFormula("+1+cmd|'/c calc'!A0")).toBe("'+1+cmd|'/c calc'!A0");
+    expect(neutralizeFormula('@HYPERLINK("http://x")')).toBe("'@HYPERLINK(\"http://x\")");
+    expect(neutralizeFormula('cmd|x')).toBe('cmd|x'); // no leading trigger char
+  });
+  it('prefixes an apostrophe to tab/CR/LF-led cells', () => {
+    expect(neutralizeFormula('\ttab-led')).toBe("'\ttab-led");
+    expect(neutralizeFormula('\rcr-led')).toBe("'\rcr-led");
+    expect(neutralizeFormula('\nlf-led')).toBe("'\nlf-led");
+  });
+  it('neutralizes a leading minus only when the cell is not a plain number', () => {
+    expect(neutralizeFormula("-2+3+cmd|'/c calc'!A0")).toBe("'-2+3+cmd|'/c calc'!A0");
+    expect(neutralizeFormula('-Infinity')).toBe("'-Infinity");
+    expect(neutralizeFormula('-cmd')).toBe("'-cmd");
+  });
+  it('keeps pure negative numbers and ordinary text untouched', () => {
+    expect(neutralizeFormula('-3')).toBe('-3');
+    expect(neutralizeFormula('-2.5')).toBe('-2.5');
+    expect(neutralizeFormula('-1e3')).toBe('-1e3');
+    expect(neutralizeFormula('rice')).toBe('rice');
+    expect(neutralizeFormula('a,b')).toBe('a,b');
+    expect(neutralizeFormula('')).toBe('');
+  });
+});
+
+describe('csvCell neutralizes formula injection', () => {
+  it('defuses the classic Excel/DDE payloads', () => {
+    expect(csvCell("=cmd|'/c calc'!A0")).toBe("'=cmd|'/c calc'!A0");
+    expect(csvCell('=2+2')).toBe("'=2+2");
+    expect(csvCell('+cmd')).toBe("'+cmd");
+    expect(csvCell('@cmd')).toBe("'@cmd");
+    expect(csvCell("-2+3+cmd|'x'!A0")).toBe("'-2+3+cmd|'x'!A0");
+  });
+  it('composes neutralization with RFC 4180 quoting', () => {
+    expect(csvCell('=a,b')).toBe("\"'=a,b\"");
+    expect(csvCell('="hi"')).toBe("\"'=\"\"hi\"\"\"");
+  });
+  it('keeps numeric cells numeric (negative values round-trip)', () => {
+    expect(csvCell(-3)).toBe('-3');
+    expect(csvCell(-2.5)).toBe('-2.5');
+    expect(csvCell(42)).toBe('42');
+  });
+  it('leaves ordinary data untouched', () => {
+    expect(csvCell('rice')).toBe('rice');
+    expect(csvCell(new Date('2026-10-20T14:05:00.000Z'))).toBe('2026-10-20T14:05:00.000Z');
+    expect(csvCell({ a: 1 })).toBe('"{""a"":1}"');
+  });
+});
+
+describe('toCsv neutralization', () => {
+  it('neutralizes formula-shaped fields inside rows', () => {
+    expect(toCsv([{ note: '=2+2' }, { note: 'ok' }])).toBe("note\r\n'=2+2\r\nok");
+  });
+  it('round-trips negative numeric columns untouched', () => {
+    expect(toCsv([{ delta: -3 }])).toBe('delta\r\n-3');
+  });
+});
+
+describe('CSV injection wiring', () => {
+  it('/api/reports escapes through the shared tested csvCell (no local copy)', () => {
+    const route = src('../../app/api/reports/route.ts');
+    expect(route).toContain("import { csvCell } from '@/lib/export-format'");
+    expect(route).not.toMatch(/function csvCell/);
+  });
+  it('every csvCell application runs neutralization before quoting', () => {
+    const lib = src('../export-format.ts');
+    expect(lib).toContain('s = neutralizeFormula(s)');
+    expect(lib).toContain('cells.map(csvCell)');
+  });
+});
+
 describe('toCsv', () => {
   it('emits header row then data rows with CRLF endings', () => {
     expect(toCsv([{ id: '1', name: 'dal' }, { id: '2', name: 'rice' }])).toBe('id,name\r\n1,dal\r\n2,rice');

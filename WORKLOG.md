@@ -51,3 +51,16 @@ P4c prod smoke checklist (run after the P4c-d deploy goes green):
 6. E2E happy path: prakriti quiz -> healing-foods lens browse -> log a meal with taste overlay + viruddha warning -> dashboard agni card -> reports print.
 
 Pending user-side verification: Vercel deploy status for 9f43862 (P4c-c) and the P4c-d commit; optional local npm test (expect 31 files / 336 tests).
+
+## 2026-10-24 - S-0 shipped: CSV formula-injection neutralization (both export paths)
+
+- Shared csvCell in apps/web/src/lib/export-format.ts now prefixes an apostrophe to formula-shaped cells (leading = + @ tab CR LF; leading '-' only when the rest is not a plain number) per the OWASP CSV-injection guidance, applied before RFC 4180 quoting. Pure negative numbers (-3, -2.5, -1e3) keep their numeric form.
+- /api/reports dropped its private string-only csvCell and imports the shared helper; /api/export (all 21 tables) inherits the fix through toCsv. Wiring-scan tests pin both paths to the shared escaper so a local copy cannot silently reappear.
+- 12 new tests: payload defusal (Excel/DDE classics), numeric round-trip, neutralization+quoting composition, toCsv integration, wiring scans. Suite: 31 files / 348 tests green; next build clean (49 routes, only the pre-existing /log img warning).
+- Zero migration (0005 stays reserved); no package.json changes; engine and food-db untouched.
+- Context: P4c-d final revision pushed to origin/main as 4be593e (superseded revision-1 33a24df replaced via force-with-lease after two pre-flight checks: exactly one remote commit, delta = ROADMAP.md one line).
+
+S-0 prod smoke checklist (after the deploy goes green):
+1. GET /api/reports (signed in) - CSV downloads as before; ordinary rows unchanged.
+2. Optional end-to-end proof: create a custom food named =SUM(1) (or +test), log it, then download /api/reports and /api/export?table=customFoods - the cell must render as '=SUM(1) (apostrophe prefix, no formula evaluation in Excel/Sheets); delete the food afterwards.
+3. Negative values (if any are logged) still export as numbers, not text.

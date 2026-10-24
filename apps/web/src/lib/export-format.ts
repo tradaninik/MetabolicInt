@@ -1,13 +1,33 @@
 ﻿// P3-1 data export: pure helpers shared by /api/export (next unit) and tests.
 // No Prisma / next-auth imports - the route supplies rows, these stay pure.
+
+/** Leading characters that make Excel / Google Sheets evaluate a cell as a
+ *  formula (OWASP "CSV Injection" cheat sheet): = + @ tab CR LF. A leading
+ *  '-' is only dangerous when what follows is not a plain number. */
+const FORMULA_START = /^[=+@\t\r\n]/;
+
+/** OWASP CSV-injection neutralization: prefix an apostrophe so spreadsheet
+ *  apps treat the cell as text instead of evaluating it. Pure negative
+ *  numbers (-3, -2.5, -1e3) keep their numeric form; all ordinary text
+ *  passes through unchanged. Applied before RFC 4180 quoting. */
+export function neutralizeFormula(s: string): string {
+  if (s === '') return s;
+  if (FORMULA_START.test(s)) return `'${s}`;
+  if (s[0] === '-' && !Number.isFinite(Number(s))) return `'${s}`;
+  return s;
+}
+
 /** RFC 4180 cell: nullish -> empty, Date -> ISO, object -> JSON text;
- *  quote iff it contains comma, double quote, CR or LF (quotes doubled). */
+ *  quote iff it contains comma, double quote, CR or LF (quotes doubled).
+ *  Formula-shaped cells (leading = + @ tab CR LF, or a non-numeric leading
+ *  '-') get an apostrophe prefix first so Excel/Sheets cannot execute them. */
 export function csvCell(value: unknown): string {
   if (value === null || value === undefined) return '';
   let s: string;
   if (value instanceof Date) s = value.toISOString();
   else if (typeof value === 'object') s = JSON.stringify(value);
   else s = String(value);
+  s = neutralizeFormula(s);
   return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 /** Rows -> CSV: CRLF endings, header from the first row (Prisma findMany

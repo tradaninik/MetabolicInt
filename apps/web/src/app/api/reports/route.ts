@@ -2,8 +2,11 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { csvCell } from '@/lib/export-format';
 
 // CSV export — opens directly in Excel/Sheets. Lightweight, no heavy deps.
+// Cells escape through the shared, unit-tested csvCell (lib/export-format.ts):
+// RFC 4180 quoting + OWASP formula-injection neutralization. No local copy.
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -33,9 +36,4 @@ export async function GET(req: Request) {
       'Content-Disposition': `attachment; filename="metabolic-report-${new Date().toISOString().slice(0, 10)}.csv"`,
     },
   });
-}
-
-function csvCell(v: string): string {
-  if (v.includes(',') || v.includes('"') || v.includes('\n')) return `"${v.replace(/"/g, '""')}"`;
-  return v;
 }
