@@ -9,8 +9,18 @@ import DayTagPicker from '@/components/DayTagPicker'; // Phase 2c: day-context t
 import AddCustomFood from '@/components/AddCustomFood'; // C2: F1 form mount
 import { blendRecipe } from '@/lib/recipe-blend'; // C3: F3 tray-as-food blend
 import type { Food, GlucoseSpike } from '@mi/engine';
-import { macrosForGrams, netCarbsG, estimateGlucoseSpike } from '@mi/engine';
-import { FOOD_INDEX, REGION_LABELS } from '@mi/food-db'; // C2: FOOD_INDEX for the placeholder count
+import {
+  macrosForGrams,
+  netCarbsG,
+  estimateGlucoseSpike,
+  doshaFoodAdvice,
+  mealTasteBalance,
+  istMinuteOfDay,
+  lateMealBanner,
+  RASA_ORDER,
+  RASA_META,
+} from '@mi/engine';
+import { FOOD_INDEX, REGION_LABELS, tasteOf } from '@mi/food-db'; // C2: FOOD_INDEX for the placeholder count
 import { classifyMealType } from '@/lib/meal-bits';
 import { PLATES, getPlateItems } from '@/lib/plates';
 
@@ -73,6 +83,8 @@ export default function LogPage() {
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [postMeal, setPostMeal] = useState<{ loggedAt: number; name: string; dueAt: number } | null>(null);
+  // P4c-b / U17: educational banner after saving a meal deep in a low-agni IST window.
+  const [agniBanner, setAgniBanner] = useState<{ title: string; body: string } | null>(null);
   const [comboName, setComboName] = useState('');
   const [myCombos, setMyCombos] = useState<{ id: string; name: string; items: { food: Food; portionType: 'serving' | 'katori' | 'grams'; portionValue: number }[] }[]>([]);
   const [comboMsg, setComboMsg] = useState<string | null>(null);
@@ -207,6 +219,13 @@ export default function LogPage() {
     : null;
 
   const mealType = items.length > 0 ? classifyMealType(whenMs, totals.nc) : null;
+
+  // P4c-b / U16: "Tastes in this meal" - the Ayurveda lens over the current tray.
+  // Items without classical taste data (custom foods) count toward totals only.
+  const tasteBalance = useMemo(
+    () => mealTasteBalance(items.map((x) => tasteOf(x.it.food.id) ?? {})),
+    [items],
+  );
 
   // What-if 1: halve the top-carb item (macros are linear in grams, so nc/2 is exact).
   const halfPortion = useMemo(() => {
@@ -362,6 +381,7 @@ export default function LogPage() {
     setSaving(true);
     setError(null);
     setSavedMsg(null);
+    setAgniBanner(null);
     const label = trayLabel();
     const loggedAt = whenMs;
     let lastCheckIn: { label?: string; dueAt: number } | null = null;
@@ -419,6 +439,10 @@ export default function LogPage() {
 
       const spike = previewSpike?.deltaMgDl ?? 0;
       setSavedMsg(`Logged ${label} (${mealType}). Predicted glucose rise about ${Math.round(spike)} mg/dL.${dayNote}`);
+      // P4c-b / U17: the meal landed deep in a low-agni window (20:30-06:00 IST) ->
+      // gentle educational banner. Normal breakfast/dinner times never trigger it.
+      const banner = lateMealBanner(istMinuteOfDay(loggedAt));
+      if (banner) setAgniBanner({ title: banner.title, body: banner.body });
       if (lastCheckIn) {
         setPostMeal({ loggedAt, name: lastCheckIn.label ?? label, dueAt: lastCheckIn.dueAt });
       }
@@ -554,25 +578,47 @@ export default function LogPage() {
 
           {results.length > 0 && (
             <ul className="mt-3 max-h-72 overflow-y-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-              {results.map((f) => (
-                <li key={f.id}>
-                  <button
-                    onClick={() => addFood(f)}
-                    className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm hover:bg-neutral-100 dark:hover:bg-neutral-900"
-                  >
-                    <span>
-                      <span className="font-medium">{f.name}</span>
-                      {f.id.startsWith('custom-') && (
-                        <span className="ml-2 rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
-                          yours
-                        </span>
-                      )}
-                      <span className="ml-2 text-xs text-neutral-400">{REGION_LABELS[f.region]} - GI {f.gi}</span>
-                    </span>
-                    <span className="text-xs font-medium text-brand-600">+ Add</span>
-                  </button>
-                </li>
-              ))}
+              {results.map((f) => {
+                // P4c-b / U16: classical taste + dosha overlay on curated foods.
+                // Custom foods show nothing - honest coverage, no guessing.
+                const taste = tasteOf(f.id);
+                const advice = taste ? doshaFoodAdvice(taste) : null;
+                return (
+                  <li key={f.id}>
+                    <button
+                      onClick={() => addFood(f)}
+                      className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm hover:bg-neutral-100 dark:hover:bg-neutral-900"
+                    >
+                      <span>
+                        <span className="font-medium">{f.name}</span>
+                        {f.id.startsWith('custom-') && (
+                          <span className="ml-2 rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
+                            yours
+                          </span>
+                        )}
+                        <span className="ml-2 text-xs text-neutral-400">{REGION_LABELS[f.region]} - GI {f.gi}</span>
+                        {taste && advice && (
+                          <span className="ml-2 inline-flex flex-wrap items-center gap-1 align-middle">
+                            <span
+                              title={`Classical tastes: ${taste.rasa.map((r) => RASA_META[r].label).join(', ')}${taste.virya ? ` (${taste.virya})` : ''} - educational approximation`}
+                              className="rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
+                            >
+                              {taste.rasa.join(' \u00b7 ')}
+                            </span>
+                            <span
+                              title={advice.label}
+                              className="rounded-full bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300"
+                            >
+                              {advice.badge}
+                            </span>
+                          </span>
+                        )}
+                      </span>
+                      <span className="text-xs font-medium text-brand-600">+ Add</span>
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           )}
 
@@ -678,6 +724,43 @@ export default function LogPage() {
               <MiniStat label="Protein" value={`${Math.round(totals.protein)}`} unit="g" />
               <MiniStat label="Fat" value={`${Math.round(totals.fat)}`} unit="g" />
             </div>
+
+            {/* P4c-b / U16: Tastes in this meal - the Ayurveda lens over the tray. */}
+            {tasteBalance.coverage.known > 0 && (
+              <div className="mt-4 rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-medium text-neutral-500">Tastes in this meal:</span>
+                  {RASA_ORDER.filter((r) => tasteBalance.counts[r] > 0).map((r) => (
+                    <span
+                      key={r}
+                      title={RASA_META[r].hint}
+                      className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+                    >
+                      {r}
+                      {tasteBalance.counts[r] > 1 ? ` \u00d7${tasteBalance.counts[r]}` : ''}
+                    </span>
+                  ))}
+                  {tasteBalance.dosha.badge && (
+                    <span
+                      title={tasteBalance.dosha.label}
+                      className="rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300"
+                    >
+                      {tasteBalance.dosha.badge}
+                    </span>
+                  )}
+                  <span className="text-[11px] text-neutral-400">
+                    {tasteBalance.virya.heating > 0 || tasteBalance.virya.cooling > 0
+                      ? `${tasteBalance.virya.heating} heating / ${tasteBalance.virya.cooling} cooling`
+                      : ''}
+                  </span>
+                </div>
+                <p className="mt-1.5 text-[11px] text-neutral-500">{tasteBalance.summary}</p>
+                <p className="mt-1 text-[10px] text-neutral-400">
+                  Rasa assignments are classical educational approximations - not medical advice.
+                  {' '}<Link href="/healing-foods" className="underline hover:text-neutral-500">Food as Medicine →</Link>
+                </p>
+              </div>
+            )}
 
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <label className="text-xs text-neutral-500">
@@ -790,6 +873,17 @@ export default function LogPage() {
           <div className="mt-4 rounded-lg border border-brand-300 bg-brand-50 p-4 text-sm text-brand-800 dark:border-brand-800 dark:bg-brand-950/40 dark:text-brand-200">
             {savedMsg}{' '}
             <Link href="/dashboard" className="ml-1 font-medium underline">View dashboard</Link>
+          </div>
+        )}
+
+        {/* P4c-b / U17: gentle educational banner when the meal landed in a low-agni window. */}
+        {agniBanner && (
+          <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+            <p className="font-medium">{agniBanner.title}</p>
+            <p className="mt-1">{agniBanner.body}</p>
+            <Link href="/healing-foods" className="mt-1 inline-block text-xs font-medium underline">
+              Food as Medicine: an early, light dinner →
+            </Link>
           </div>
         )}
       </div>

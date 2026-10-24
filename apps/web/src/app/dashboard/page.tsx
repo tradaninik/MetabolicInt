@@ -11,6 +11,7 @@ import { getPendingCheckIns } from '@/lib/pairing';
 import CheckInCard from '@/components/CheckInCard';
 import QuickAdd from '@/components/QuickAdd';
 import SeasonalCard from '@/components/SeasonalCard';
+import AgniRhythmCard from '@/components/AgniRhythmCard';
 
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
@@ -177,6 +178,9 @@ export default async function DashboardPage() {
 
         {/* Seasonal guidance (U14 Ritucharya) */}
         <SeasonalCard />
+
+        {/* Agni rhythm (P4c-b U17) */}
+        <AgniRhythmCard userId={session.user.id} />
 
         {/* Health timeline */}
         <Card title="Health timeline" subtitle="Last 24 hours" className="mt-4">

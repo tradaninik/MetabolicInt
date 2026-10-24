@@ -3,6 +3,8 @@
 // edit (past entries keep their frozen numbers) and delete (409 with
 // plain-language reasons while referenced).
 import { useCallback, useEffect, useState } from 'react';
+import { findTasteByName, findHealingFoodByName } from '@mi/food-db';
+import { doshaFoodAdvice } from '@mi/engine';
 
 type Food = {
   id: string;
@@ -87,7 +89,14 @@ export default function MyFoodsPage() {
       )}
 
       <ul className="mt-6 space-y-3">
-        {foods.map((f) => (
+        {foods.map((f) => {
+          // P4c-b / U16: classical-property overlay. A custom food gets the rasa/dosha
+          // badge when its name or an alias matches a curated classic; a Food as Medicine
+          // chip when it matches a knowledge-base entry. No match, no badge - no guessing.
+          const tasteMatch = findTasteByName(f.name, f.aliases);
+          const advice = tasteMatch ? doshaFoodAdvice(tasteMatch.taste) : null;
+          const healing = findHealingFoodByName(f.name, f.aliases);
+          return (
           <li key={f.id} className="rounded-2xl border border-neutral-200 p-4 dark:border-neutral-800">
             {editing?.id === f.id ? (
               <div className="space-y-3">
@@ -115,6 +124,36 @@ export default function MyFoodsPage() {
                   <p className="mt-1 text-xs text-neutral-500">
                     {f.kcalPer100g} kcal/100g · GI {f.gi} · logged {f.useCount} time{f.useCount === 1 ? '' : 's'}
                   </p>
+                  {(tasteMatch || healing) && (
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      {tasteMatch && advice && (
+                        <>
+                          <span
+                            title={`Matched to the classical properties of ${tasteMatch.matchedName} - educational approximation, not medical advice`}
+                            className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
+                          >
+                            {tasteMatch.taste.rasa.join(' · ')}
+                            {tasteMatch.taste.virya ? ` · ${tasteMatch.taste.virya}` : ''}
+                          </span>
+                          <span
+                            title={advice.label}
+                            className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-medium text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300"
+                          >
+                            {advice.badge}
+                          </span>
+                        </>
+                      )}
+                      {healing?.science && (
+                        <a
+                          href="/healing-foods"
+                          title={healing.headline}
+                          className="rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-semibold text-brand-700 hover:underline dark:bg-brand-900/40 dark:text-brand-300"
+                        >
+                          Food as Medicine · evidence {healing.science.grade}
+                        </a>
+                      )}
+                    </div>
+                  )}
                   {f.aliases.length > 0 && <p className="text-xs text-neutral-400">also searchable as: {f.aliases.join(', ')}</p>}
                 </div>
                 <div className="flex shrink-0 gap-2">
@@ -124,7 +163,8 @@ export default function MyFoodsPage() {
               </div>
             )}
           </li>
-        ))}
+          );
+        })}
       </ul>
     </div>
   );
