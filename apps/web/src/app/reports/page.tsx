@@ -2,6 +2,7 @@
 import { redirect } from 'next/navigation';
 import { authOptions } from '@/lib/auth';
 import { loadDashboardData } from '@/lib/engine-service';
+import { MEDICAL_DISCLAIMER_REPORT } from '@/lib/disclaimer';
 import AppShell from '@/components/AppShell';
 import ReportPrint from '@/components/ReportPrint';
 import VisitSummary from '@/components/VisitSummary';
@@ -53,8 +54,8 @@ export default async function ReportsPage() {
           </div>
           <VisitSummary userId={session.user.id} />
           <DoctorQuestions />
-          <p className="mt-4 border-t border-neutral-200 pt-4 text-[11px] text-neutral-400 dark:border-neutral-800">
-            Educational report, not a medical document. Consult a clinician for treatment decisions.
+          <p className="mt-4 border-t border-neutral-200 pt-4 text-[11px] leading-relaxed text-neutral-400 dark:border-neutral-800">
+            {MEDICAL_DISCLAIMER_REPORT}
           </p>
         </div>
       </div>

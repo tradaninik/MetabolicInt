@@ -1,7 +1,7 @@
 {
   "name": "Metabolic Intelligence",
   "short_name": "Metabolic",
-  "description": "Personal metabolic intelligence for diabetes, obesity, and preventive health.",
+  "description": "Personal metabolic companion: educational guidance for blood sugar and healthy lifestyle. Not medical advice — always consult your clinician.",
   "start_url": "/dashboard",
   "scope": "/",
   "display": "standalone",

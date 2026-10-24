@@ -33,3 +33,21 @@
 - Signed-in E2E re-verified on prod: {"profile":null} -> quiz -> dosha percentages -> persisted profile on re-GET; SeasonalCard confirmed (Sharad - autumn; initially missed below the charts fold).
 - Nav follow-up: /prakriti added to AppShell NAV (desktop + mobile) in commit 76d4fed.
 - libsql-probe.mjs committed under apps/web/scripts as a reusable read-only DB diagnostic.
+
+## 2026-10-24 - P4c deployed (0d07225, 46e50ff, 9f43862) + closeout commit
+
+- All four P4c blocks applied on main via the gated artifact protocol (patch + bundle fallback + SHA256-verified PowerShell script, y/n gates, one commit per block, --reset-author --no-edit so no editor ever opens; rebase/am leftover-state preflight added after a user-side `git am` mishap).
+- Suite evolution: 24 files/211 -> 27/267 (user-verified locally after P4c-b) -> 30/324 (P4c-c; user skipped local run, Vercel deploy of 9f43862 is the backstop) -> 31/336 (P4c-d, sandbox-verified).
+- Sandbox verification per block: full vitest green + next build clean (49 routes; only the pre-existing /log <img> warning; out-of-repo DATABASE_URL for page-data collection).
+- P4c-d closeout: global medical disclaimer shipped - canonical strings (lib/disclaimer.ts) rendered by AppShell footer on every authed page, login page, printed report footer, and PWA manifest description; content + danger-language + wiring tests. ROADMAP forward plan updated (locked P4d-g spine; P5 Mobile and Reach; P6 Stress & Cortisol - user correction, was drafted as kidney care; P7 My Kitchen; P8 Organ Labs platform, kidney first; backlog).
+- Zero migration across all of P4c (0005 stays reserved). No package.json changes.
+
+P4c prod smoke checklist (run after the P4c-d deploy goes green):
+1. /healing-foods: page loads; three lens tabs switch; evidence badges render; rebuttal box visible on Science lens; seasonal badge correct for current IST month.
+2. /log: search results show taste/dosha badges; tray shows "Tastes in this meal" strip with honest coverage count; add milk + fish to tray -> amber viruddha strip with classical rationale AND modern note; save in a low-agni window -> late-meal educational banner.
+3. /dashboard: AgniRhythmCard below SeasonalCard; integer agniScore 0-100; rhythm habit entries render.
+4. Unauthenticated GET /api/ayurveda/agni and POST /api/ayurveda/viruddha -> 401.
+5. Disclaimer footer visible at the bottom of every authed page with expandable "Why we show this"; /login shows the short line under the form; printed report carries the report disclaimer; manifest description shows the not-medical-advice framing.
+6. E2E happy path: prakriti quiz -> healing-foods lens browse -> log a meal with taste overlay + viruddha warning -> dashboard agni card -> reports print.
+
+Pending user-side verification: Vercel deploy status for 9f43862 (P4c-c) and the P4c-d commit; optional local npm test (expect 31 files / 336 tests).
