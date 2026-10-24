@@ -17,10 +17,14 @@ import {
   mealTasteBalance,
   istMinuteOfDay,
   lateMealBanner,
+  checkViruddha,
+  VIRUDDHA_SEVERITY_META,
+  VIRUDDHA_DISCLAIMER,
   RASA_ORDER,
   RASA_META,
+  type ViruddhaFinding,
 } from '@mi/engine';
-import { FOOD_INDEX, REGION_LABELS, tasteOf } from '@mi/food-db'; // C2: FOOD_INDEX for the placeholder count
+import { FOOD_INDEX, REGION_LABELS, tasteOf, viruddhaTagsOf, findViruddhaTagsByName } from '@mi/food-db'; // C2: FOOD_INDEX for the placeholder count
 import { classifyMealType } from '@/lib/meal-bits';
 import { PLATES, getPlateItems } from '@/lib/plates';
 
@@ -85,6 +89,9 @@ export default function LogPage() {
   const [postMeal, setPostMeal] = useState<{ loggedAt: number; name: string; dueAt: number } | null>(null);
   // P4c-b / U17: educational banner after saving a meal deep in a low-agni IST window.
   const [agniBanner, setAgniBanner] = useState<{ title: string; body: string } | null>(null);
+  // P4c-c / U19: amber pairing notes returned by the meals API after a save
+  // (same-meal window - catches cross-tray combos like milk 40 minutes ago + fish now).
+  const [viruddhaBanner, setViruddhaBanner] = useState<ViruddhaFinding[] | null>(null);
   const [comboName, setComboName] = useState('');
   const [myCombos, setMyCombos] = useState<{ id: string; name: string; items: { food: Food; portionType: 'serving' | 'katori' | 'grams'; portionValue: number }[] }[]>([]);
   const [comboMsg, setComboMsg] = useState<string | null>(null);
@@ -224,6 +231,25 @@ export default function LogPage() {
   // Items without classical taste data (custom foods) count toward totals only.
   const tasteBalance = useMemo(
     () => mealTasteBalance(items.map((x) => tasteOf(x.it.food.id) ?? {})),
+    [items],
+  );
+
+  // P4c-c / U19: classical pairing check (viruddha ahara) over the current tray -
+  // the same check the saved-combo path flows through, since loading a combo fills
+  // this tray. Curated foods resolve by id; customs by exact name/alias match.
+  // Clean trays show nothing; findings render amber with both lenses, never red.
+  const viruddhaFindings = useMemo(
+    () =>
+      checkViruddha(
+        items.map((x) => ({
+          key: x.it.food.id,
+          label: x.it.food.name,
+          tags:
+            viruddhaTagsOf(x.it.food.id) ??
+            findViruddhaTagsByName(x.it.food.name, x.it.food.aliases ?? []) ??
+            [],
+        })),
+      ),
     [items],
   );
 
@@ -382,10 +408,15 @@ export default function LogPage() {
     setError(null);
     setSavedMsg(null);
     setAgniBanner(null);
+    setViruddhaBanner(null);
     const label = trayLabel();
     const loggedAt = whenMs;
     let lastCheckIn: { label?: string; dueAt: number } | null = null;
     let savedCount = 0;
+    // P4c-c / U19: pairing notes returned by the meals API across the save loop,
+    // deduplicated by pair id so a tray of milk + fish + curd shows each row once.
+    const seenPairIds = new Set<string>();
+    const collectedViruddha: ViruddhaFinding[] = [];
     try {
       for (let i = 0; i < tray.length; i++) {
         const it = tray[i];
@@ -403,6 +434,14 @@ export default function LogPage() {
         if (!res.ok) throw new Error(`could not save ${it.food.name}`);
         const j = await res.json();
         if (j.checkIn) lastCheckIn = j.checkIn as { label?: string; dueAt: number };
+        if (Array.isArray(j.viruddha?.findings)) {
+          for (const f of j.viruddha.findings as ViruddhaFinding[]) {
+            if (f?.pairId && !seenPairIds.has(f.pairId)) {
+              seenPairIds.add(f.pairId);
+              collectedViruddha.push(f);
+            }
+          }
+        }
         savedCount++;
       }
 
@@ -443,6 +482,8 @@ export default function LogPage() {
       // gentle educational banner. Normal breakfast/dinner times never trigger it.
       const banner = lateMealBanner(istMinuteOfDay(loggedAt));
       if (banner) setAgniBanner({ title: banner.title, body: banner.body });
+      // P4c-c / U19: amber pairing notes from the same-meal window check.
+      if (collectedViruddha.length > 0) setViruddhaBanner(collectedViruddha);
       if (lastCheckIn) {
         setPostMeal({ loggedAt, name: lastCheckIn.label ?? label, dueAt: lastCheckIn.dueAt });
       }
@@ -762,6 +803,20 @@ export default function LogPage() {
               </div>
             )}
 
+            {/* P4c-c / U19: classical pairing check (viruddha ahara) over the tray.
+                Amber, never red: educational tradition with both lenses shown. */}
+            {viruddhaFindings.length > 0 && (
+              <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/40">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-medium text-amber-900 dark:text-amber-200">Classical pairing check (viruddha ahara):</span>
+                  <span className="rounded-full border border-amber-300 bg-amber-100/60 px-2 py-0.5 text-[10px] text-amber-800 dark:border-amber-700 dark:text-amber-300">
+                    educational - amber by design, not a safety alarm
+                  </span>
+                </div>
+                <ViruddhaNotes findings={viruddhaFindings} />
+              </div>
+            )}
+
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <label className="text-xs text-neutral-500">
                 When did you eat?{' '}<span suppressHydrationWarning className='text-neutral-400'>({fmtWhen(whenMs)})</span>
@@ -886,6 +941,14 @@ export default function LogPage() {
             </Link>
           </div>
         )}
+
+        {/* P4c-c / U19: amber pairing notes from the same-meal window after a save. */}
+        {viruddhaBanner && viruddhaBanner.length > 0 && (
+          <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+            <p className="font-medium">Classical pairing note for what you just logged</p>
+            <ViruddhaNotes findings={viruddhaBanner} />
+          </div>
+        )}
       </div>
     </AppShell>
   );
@@ -912,5 +975,34 @@ function MiniStat({ label, value, unit }: { label: string; value: string; unit?:
       <div className="text-xs text-neutral-500">{label}</div>
       <div className="mt-0.5 font-semibold">{value} {unit && <span className="text-xs font-normal text-neutral-400">{unit}</span>}</div>
     </div>
+  );
+}
+
+// P4c-c / U19: shared renderer for viruddha findings - used by the live tray strip
+// and the post-save banner. Every finding shows the items, the severity chip, the
+// classical rationale AND the modern note, so neither lens speaks alone.
+function ViruddhaNotes({ findings }: { findings: ViruddhaFinding[] }) {
+  return (
+    <ul className="mt-2 space-y-2">
+      {findings.map((f) => (
+        <li key={f.pairId} className="text-[11px] leading-relaxed text-amber-900 dark:text-amber-200">
+          <span className="font-medium">{f.items.map((i) => i.label).join(' + ')}:</span>{' '}
+          <span
+            title={VIRUDDHA_SEVERITY_META[f.severity].note}
+            className="rounded-full border border-amber-300 bg-amber-100/70 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+          >
+            {VIRUDDHA_SEVERITY_META[f.severity].label}
+          </span>
+          <br />
+          <span>Classical: {f.classical}</span>
+          <br />
+          <span className="text-amber-800/90 dark:text-amber-300/90">Modern lens: {f.modern}</span>
+        </li>
+      ))}
+      <li className="pt-1 text-[10px] text-amber-700/80 dark:text-amber-400/80">
+        {VIRUDDHA_DISCLAIMER}{' '}
+        <Link href="/healing-foods" className="underline hover:text-amber-900 dark:hover:text-amber-200">Food as Medicine →</Link>
+      </li>
+    </ul>
   );
 }

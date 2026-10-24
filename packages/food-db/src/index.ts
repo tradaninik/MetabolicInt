@@ -13,7 +13,7 @@
 
 export type { Food, CuisineRegion, FoodCategory } from '@mi/engine';
 
-import type { Food, HealingFood, FoodTaste } from '@mi/engine';
+import type { Food, HealingFood, FoodTaste, ViruddhaTag } from '@mi/engine';
 
 import { southIndian } from './data/south-indian';
 import { northIndian } from './data/north-indian';
@@ -28,6 +28,7 @@ import { rajasthani } from './data/rajasthani';
 import { global } from './data/global';
 import { healingFoods } from './data/healing-foods';
 import { foodTastes } from './data/food-tastes';
+import { viruddhaTags, viruddhaTagNames } from './data/viruddha-tags';
 
 /** All foods, flat. */
 export const FOODS: Food[] = [
@@ -59,6 +60,27 @@ export const HEALING_FOOD_INDEX: Record<string, HealingFood> = Object.fromEntrie
 
 /** Classical taste (rasa) + potency (virya) per curated food (P4c-b / U16 logging overlay). */
 export const FOOD_TASTES: Record<string, FoodTaste> = foodTastes;
+
+/** Viruddha food classes per curated food (P4c-c / U19 pairing checker). */
+export const VIRUDDHA_TAGS: Record<string, ViruddhaTag[]> = viruddhaTags;
+
+/** Name-matched viruddha food classes for custom foods (P4c-c / U19). */
+export const VIRUDDHA_TAG_NAMES: Record<string, ViruddhaTag[]> = viruddhaTagNames;
+
+/** Viruddha food classes for a curated food by id (P4c-c / U19 pairing checker). */
+export function viruddhaTagsOf(foodId: string): ViruddhaTag[] | undefined {
+  return VIRUDDHA_TAGS[foodId];
+}
+
+/** Match a custom food's name (or one of its aliases) to viruddha food classes. */
+export function findViruddhaTagsByName(name: string, aliases: string[] = []): ViruddhaTag[] | undefined {
+  for (const n of [name, ...aliases]) {
+    if (typeof n !== 'string') continue;
+    const hit = VIRUDDHA_TAG_NAMES[n.toLowerCase().trim()];
+    if (hit) return hit;
+  }
+  return undefined;
+}
 
 /** A taste match found by name - powers the /my-foods overlay for custom foods. */
 export interface TasteMatch {

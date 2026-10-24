@@ -9,6 +9,7 @@ import {
   type UserProfile,
 } from '@mi/engine';
 import { macrosForGrams } from '@/lib/engine-service';
+import { viruddhaFindingsForFoods } from '@/lib/viruddha'; // P4c-c / U19: pairing notes on save
 import { afterMealLogged, updateLearnedModel, type PendingCheckIn, type LearnedModelInfo } from '@/lib/pairing';
 
 export async function POST(req: Request) {
@@ -105,11 +106,36 @@ export async function POST(req: Request) {
     console.error('pairing: meal post failed', e);
   }
 
+  // P4c-c / U19: Viruddha Ahara check over the same-meal window - this entry plus
+  // everything the user logged within an hour of it (the tray saves sequentially, so
+  // item 2 sees item 1; a snack 40 minutes ago also counts). Educational, amber-only;
+  // best-effort and never blocks the save. Findings carry BOTH the classical rationale
+  // and the modern note, so API/mobile consumers can render them as-is.
+  let viruddha: { findings: ReturnType<typeof viruddhaFindingsForFoods> } | undefined;
+  try {
+    const mealTime = loggedAtDate ? loggedAtDate.getTime() : Date.now();
+    const recent = await prisma.foodEntry.findMany({
+      where: {
+        userId: session.user.id,
+        id: { not: entry.id },
+        loggedAt: { gte: new Date(mealTime - 60 * 60_000), lte: new Date(mealTime + 60 * 60_000) },
+      },
+      include: { food: true },
+      orderBy: { loggedAt: 'desc' },
+      take: 12,
+    });
+    const findings = viruddhaFindingsForFoods([food, ...recent.map((r) => r.food)]);
+    if (findings.length > 0) viruddha = { findings };
+  } catch (e) {
+    console.error('viruddha: same-meal check failed', e);
+  }
+
   return NextResponse.json({
     entry,
     predictedSpike: spike,
     ...(checkIn ? { checkIn } : {}),
     ...(model ? { model } : {}),
+    ...(viruddha ? { viruddha } : {}),
   });
 }
 

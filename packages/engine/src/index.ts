@@ -21,6 +21,7 @@ export * from './ritucharya';
 export * from './foodAsMedicine';
 export * from './tastes';
 export * from './agniRhythm';
+export * from './viruddha';
 
 export const ENGINE_VERSION = '0.1.0';
 export * from './glucoseGuard';
