@@ -13,7 +13,7 @@
 
 export type { Food, CuisineRegion, FoodCategory } from '@mi/engine';
 
-import type { Food } from '@mi/engine';
+import type { Food, HealingFood } from '@mi/engine';
 
 import { southIndian } from './data/south-indian';
 import { northIndian } from './data/north-indian';
@@ -26,6 +26,7 @@ import { kerala } from './data/kerala';
 import { maharashtrian } from './data/maharashtrian';
 import { rajasthani } from './data/rajasthani';
 import { global } from './data/global';
+import { healingFoods } from './data/healing-foods';
 
 /** All foods, flat. */
 export const FOODS: Food[] = [
@@ -45,6 +46,14 @@ export const FOODS: Food[] = [
 /** Fast lookup by id. */
 export const FOOD_INDEX: Record<string, Food> = Object.fromEntries(
   FOODS.map((f) => [f.id, f]),
+);
+
+/** Curated Food as Medicine knowledge base (P4c / U16, multi-lens). */
+export const HEALING_FOODS: HealingFood[] = healingFoods;
+
+/** Fast lookup by slug for the Food as Medicine surfaces. */
+export const HEALING_FOOD_INDEX: Record<string, HealingFood> = Object.fromEntries(
+  HEALING_FOODS.map((f) => [f.slug, f]),
 );
 
 /** Foods belonging to a cuisine region. */
