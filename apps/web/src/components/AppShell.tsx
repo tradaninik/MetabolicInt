@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
+import MedicalDisclaimer from './MedicalDisclaimer';
 
 const NAV = [
   { href: '/dashboard', label: 'Dashboard' },
@@ -77,7 +78,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </button>
         </header>
         <MobileNav />
-        <main className="flex-1 px-4 py-6 pb-24 sm:px-6 lg:px-8">{children}</main>
+        <main className="flex-1 px-4 py-6 pb-24 sm:px-6 lg:px-8">
+          {children}
+          <MedicalDisclaimer />
+        </main>
       </div>
     </div>
   );

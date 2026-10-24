@@ -4,6 +4,7 @@ import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { signIn } from 'next-auth/react';
+import { MEDICAL_DISCLAIMER_SHORT } from '@/lib/disclaimer';
 
 export default function LoginPage() {
   return (
@@ -117,6 +118,10 @@ function LoginForm() {
         <Link href="/onboarding" className="font-medium text-brand-600 hover:underline">
           Create an account
         </Link>
+      </p>
+
+      <p className="mt-8 text-center text-xs leading-relaxed text-neutral-500 dark:text-neutral-400">
+        {MEDICAL_DISCLAIMER_SHORT}
       </p>
     </main>
   );
