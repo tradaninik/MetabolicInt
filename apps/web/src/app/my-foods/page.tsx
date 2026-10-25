@@ -3,6 +3,10 @@
 // C4 (F5): My Foods - every food this user created, with times logged,
 // edit (past entries keep their frozen numbers) and delete (409 with
 // plain-language reasons while referenced).
+// R-1 (stream C): rebuilt in the compact-row language of the redesigned
+// /healing-foods library - one card list, divide-y rows, at-a-glance chips,
+// classical badges inline, full macros behind a native details disclosure.
+// Presentation only: same API, same edit/delete semantics.
 import { useCallback, useEffect, useState } from 'react';
 import { findTasteByName, findHealingFoodByName } from '@mi/food-db';
 import { doshaFoodAdvice } from '@mi/engine';
@@ -73,102 +77,120 @@ export default function MyFoodsPage() {
     setBanner(typeof data.error === 'string' ? data.error : Object.values(data.errors ?? {})[0] ?? 'Could not save.');
   }
 
-  const input = 'w-full rounded-lg border border-neutral-300 bg-transparent px-2 py-1.5 text-sm dark:border-neutral-700';
+  const input = 'w-full rounded-lg border border-neutral-300 bg-transparent px-2 py-1.5 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:border-neutral-700';
+  const chip = 'rounded-full bg-neutral-100 px-2.5 py-0.5 text-xs text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300';
+  const action = 'rounded-lg px-3 py-1.5 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600';
+
   return (
     <div className="mx-auto max-w-2xl">
       <h1 className="text-2xl font-semibold tracking-tight">My Foods</h1>
       <p className="mt-1 text-sm text-neutral-500">Foods you created - searchable everywhere, editable, yours alone.</p>
 
-      {banner && <p className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300">{banner}</p>}
+      {banner && <p role="alert" className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300">{banner}</p>}
 
-      {!loaded && <p className="mt-6 text-sm text-neutral-500">Loading...</p>}
+      {!loaded && <p role="status" className="mt-6 text-sm text-neutral-500">Loading...</p>}
       {loaded && foods.length === 0 && (
         <p className="mt-6 text-sm text-neutral-500">
           Nothing here yet. Add your own food from{' '}
-          <a href="/log" className="text-brand-600 underline dark:text-brand-400">Log a meal</a>{' '}
+          <Link href="/log" className="text-brand-600 underline dark:text-brand-400">Log a meal</Link>{' '}
           - search something, then &quot;Add your own food&quot;.
         </p>
       )}
 
-      <ul className="mt-6 space-y-3">
-        {foods.map((f) => {
-          // P4c-b / U16: classical-property overlay. A custom food gets the rasa/dosha
-          // badge when its name or an alias matches a curated classic; a Food as Medicine
-          // chip when it matches a knowledge-base entry. No match, no badge - no guessing.
-          const tasteMatch = findTasteByName(f.name, f.aliases);
-          const advice = tasteMatch ? doshaFoodAdvice(tasteMatch.taste) : null;
-          const healing = findHealingFoodByName(f.name, f.aliases);
-          return (
-          <li key={f.id} className="rounded-2xl border border-neutral-200 p-4 dark:border-neutral-800">
-            {editing?.id === f.id ? (
-              <div className="space-y-3">
-                <input className={input} value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} aria-label="name" />
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  {NUM_FIELDS.map((k) => (
-                    <label key={k} className="text-xs text-neutral-500">
-                      {k === 'gi' ? 'GI' : k === 'servingGrams' ? 'Serving g' : k.replace('Per100g', '/100g')}
-                      <input className={input} inputMode="decimal" value={editing[k]} onChange={(e) => setEditing({ ...editing, [k]: e.target.value })} />
-                    </label>
-                  ))}
-                </div>
-                <input className={input} placeholder="Also searchable as (comma-separated)" value={editing.aliases.join(',')} onChange={(e) => setEditing({ ...editing, aliases: e.target.value.split(',') })} aria-label="aliases" />
-                <p className="text-[11px] text-neutral-500">Past logged meals keep the numbers they were logged with.</p>
-                <div className="flex gap-2">
-                  <button onClick={saveEdit} className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">Save</button>
-                  <button onClick={() => setEditing(null)} className="rounded-lg border border-neutral-300 px-4 py-2 text-sm dark:border-neutral-700">Cancel</button>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <span className="font-medium">{f.name}</span>
-                  <span className="ml-2 rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">yours</span>
-                  <p className="mt-1 text-xs text-neutral-500">
-                    {f.kcalPer100g} kcal/100g · GI {f.gi} · logged {f.useCount} time{f.useCount === 1 ? '' : 's'}
-                  </p>
-                  {(tasteMatch || healing) && (
-                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                      {tasteMatch && advice && (
-                        <>
-                          <span
-                            title={`Matched to the classical properties of ${tasteMatch.matchedName} - educational approximation, not medical advice`}
-                            className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
-                          >
-                            {tasteMatch.taste.rasa.join(' · ')}
-                            {tasteMatch.taste.virya ? ` · ${tasteMatch.taste.virya}` : ''}
-                          </span>
-                          <span
-                            title={advice.label}
-                            className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-medium text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300"
-                          >
-                            {advice.badge}
-                          </span>
-                        </>
-                      )}
-
-                      {healing?.science && (
-                        <Link
-                          href="/healing-foods"
-                          title={healing.headline}
-                          className="rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-semibold text-brand-700 hover:underline dark:bg-brand-900/40 dark:text-brand-300"
-                        >
-                          Food as Medicine · evidence {healing.science.grade}
-                        </Link>
-                      )}
+      {loaded && foods.length > 0 && (
+        <ul className="mt-6 divide-y divide-neutral-100 rounded-2xl border border-neutral-200 bg-white dark:divide-neutral-900 dark:border-neutral-800 dark:bg-neutral-950">
+          {foods.map((f) => {
+            // P4c-b / U16: classical-property overlay. A custom food gets the rasa/dosha
+            // badge when its name or an alias matches a curated classic; a Food as Medicine
+            // chip when it matches a knowledge-base entry. No match, no badge - no guessing.
+            const tasteMatch = findTasteByName(f.name, f.aliases);
+            const advice = tasteMatch ? doshaFoodAdvice(tasteMatch.taste) : null;
+            const healing = findHealingFoodByName(f.name, f.aliases);
+            return (
+              <li key={f.id} className="px-4 py-3">
+                {editing?.id === f.id ? (
+                  <div className="space-y-3 py-1">
+                    <input className={input} value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} aria-label="food name" />
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      {NUM_FIELDS.map((k) => (
+                        <label key={k} className="text-xs text-neutral-500">
+                          {k === 'gi' ? 'GI' : k === 'servingGrams' ? 'Serving g' : k.replace('Per100g', '/100g')}
+                          <input className={input} inputMode="decimal" value={editing[k]} onChange={(e) => setEditing({ ...editing, [k]: e.target.value })} />
+                        </label>
+                      ))}
                     </div>
-                  )}
-                  {f.aliases.length > 0 && <p className="text-xs text-neutral-400">also searchable as: {f.aliases.join(', ')}</p>}
-                </div>
-                <div className="flex shrink-0 gap-2">
-                  <button onClick={() => setEditing(f)} className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700">Edit</button>
-                  <button onClick={() => remove(f)} className="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 dark:border-red-900 dark:hover:bg-red-950/40">Delete</button>
-                </div>
-              </div>
-            )}
-          </li>
-          );
-        })}
-      </ul>
+                    <input className={input} placeholder="Also searchable as (comma-separated)" value={editing.aliases.join(',')} onChange={(e) => setEditing({ ...editing, aliases: e.target.value.split(',') })} aria-label="aliases" />
+                    <p className="text-[11px] text-neutral-500">Past logged meals keep the numbers they were logged with.</p>
+                    <div className="flex gap-2">
+                      <button onClick={saveEdit} className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600">Save</button>
+                      <button onClick={() => setEditing(null)} className={`${action} border border-neutral-300 dark:border-neutral-700`}>Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-medium">{f.name}</span>
+                        <span className="rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">yours</span>
+                      </div>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                        <span className={chip}>{f.kcalPer100g} kcal/100g</span>
+                        <span className={chip}>GI {f.gi}</span>
+                        <span className={chip}>logged {f.useCount} time{f.useCount === 1 ? '' : 's'}</span>
+                      </div>
+                      {(tasteMatch || healing) && (
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          {tasteMatch && advice && (
+                            <>
+                              <span
+                                title={`Matched to the classical properties of ${tasteMatch.matchedName} - educational approximation, not medical advice`}
+                                className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
+                              >
+                                {tasteMatch.taste.rasa.join(' · ')}
+                                {tasteMatch.taste.virya ? ` · ${tasteMatch.taste.virya}` : ''}
+                              </span>
+                              <span title={advice.label} className={chip}>
+                                {advice.badge}
+                              </span>
+                            </>
+                          )}
+                          {healing?.science && (
+                            <Link
+                              href="/healing-foods"
+                              title={healing.headline}
+                              className="rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-semibold text-brand-700 hover:underline dark:bg-brand-900/40 dark:text-brand-300"
+                            >
+                              Food as Medicine · evidence {healing.science.grade}
+                            </Link>
+                          )}
+                        </div>
+                      )}
+                      {f.aliases.length > 0 && <p className="mt-1 text-xs text-neutral-400">also searchable as: {f.aliases.join(', ')}</p>}
+                      <details className="mt-2">
+                        <summary className="cursor-pointer text-xs font-medium text-brand-600 dark:text-brand-400">Nutrition details</summary>
+                        <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-3">
+                          <div><dt className="text-neutral-400 dark:text-neutral-500">Carbs</dt><dd className="text-neutral-700 dark:text-neutral-300">{f.carbsPer100g} g/100g</dd></div>
+                          <div><dt className="text-neutral-400 dark:text-neutral-500">Protein</dt><dd className="text-neutral-700 dark:text-neutral-300">{f.proteinPer100g} g/100g</dd></div>
+                          <div><dt className="text-neutral-400 dark:text-neutral-500">Fat</dt><dd className="text-neutral-700 dark:text-neutral-300">{f.fatPer100g} g/100g</dd></div>
+                          <div><dt className="text-neutral-400 dark:text-neutral-500">Fiber</dt><dd className="text-neutral-700 dark:text-neutral-300">{f.fiberPer100g} g/100g</dd></div>
+                          <div><dt className="text-neutral-400 dark:text-neutral-500">Serving</dt><dd className="text-neutral-700 dark:text-neutral-300">{f.servingGrams} g</dd></div>
+                          {f.katoriGrams !== null && (
+                            <div><dt className="text-neutral-400 dark:text-neutral-500">Katori</dt><dd className="text-neutral-700 dark:text-neutral-300">{f.katoriGrams} g</dd></div>
+                          )}
+                        </dl>
+                      </details>
+                    </div>
+                    <div className="flex shrink-0 gap-2">
+                      <button onClick={() => setEditing(f)} aria-label={`Edit ${f.name}`} className={`${action} border border-neutral-300 dark:border-neutral-700`}>Edit</button>
+                      <button onClick={() => remove(f)} aria-label={`Delete ${f.name}`} className={`${action} border border-red-200 text-red-600 hover:bg-red-50 dark:border-red-900 dark:hover:bg-red-950/40`}>Delete</button>
+                    </div>
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }
