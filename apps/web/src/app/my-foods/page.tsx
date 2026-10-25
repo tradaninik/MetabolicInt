@@ -1,10 +1,12 @@
 'use client';
+
 // C4 (F5): My Foods - every food this user created, with times logged,
 // edit (past entries keep their frozen numbers) and delete (409 with
 // plain-language reasons while referenced).
 import { useCallback, useEffect, useState } from 'react';
 import { findTasteByName, findHealingFoodByName } from '@mi/food-db';
 import { doshaFoodAdvice } from '@mi/engine';
+import Link from 'next/link';
 
 type Food = {
   id: string;
@@ -143,14 +145,15 @@ export default function MyFoodsPage() {
                           </span>
                         </>
                       )}
+
                       {healing?.science && (
-                        <a
+                        <Link
                           href="/healing-foods"
                           title={healing.headline}
                           className="rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-semibold text-brand-700 hover:underline dark:bg-brand-900/40 dark:text-brand-300"
                         >
                           Food as Medicine · evidence {healing.science.grade}
-                        </a>
+                        </Link>
                       )}
                     </div>
                   )}
