@@ -106,7 +106,8 @@ export async function DELETE(req: NextRequest) {
 
   // Combo references: SavedCombo.items is a JSON array of {foodId,...}.
   // Only the owner can reference their custom food, so only their combos
-  // need scanning.
+  // need scanning. P6-a: recipes reference foods the same lean way, so the
+  // same scan covers Recipe.items.
   const combos = await prisma.savedCombo.findMany({ where: { userId }, select: { items: true } });
   let comboCount = 0;
   for (const c of combos) {
@@ -115,13 +116,22 @@ export async function DELETE(req: NextRequest) {
       if (Array.isArray(items) && items.some((it) => it && it.foodId === id)) comboCount++;
     } catch { /* malformed rows never count */ }
   }
+  const recipes = await prisma.recipe.findMany({ where: { userId }, select: { items: true } });
+  let recipeCount = 0;
+  for (const r of recipes) {
+    try {
+      const items = JSON.parse(r.items);
+      if (Array.isArray(items) && items.some((it) => it && it.foodId === id)) recipeCount++;
+    } catch { /* malformed rows never count */ }
+  }
 
-  if (entryCount > 0 || comboCount > 0) {
+  if (entryCount > 0 || comboCount > 0 || recipeCount > 0) {
     const bits = [
       entryCount > 0 ? `logged ${entryCount} time${entryCount === 1 ? '' : 's'}` : null,
       comboCount > 0 ? `used in ${comboCount} combo${comboCount === 1 ? '' : 's'}` : null,
+      recipeCount > 0 ? `used in ${recipeCount} recipe${recipeCount === 1 ? '' : 's'}` : null,
     ].filter(Boolean).join(', ');
-    return json({ error: `"${existing.name}" is still in use - ${bits}. Remove those uses first, then delete.`, entryCount, comboCount }, 409);
+    return json({ error: `"${existing.name}" is still in use - ${bits}. Remove those uses first, then delete.`, entryCount, comboCount, recipeCount }, 409);
   }
   await prisma.food.delete({ where: { id } });
   return json({ ok: true });

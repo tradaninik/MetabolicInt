@@ -97,6 +97,15 @@ export default function LogPage() {
   const [comboName, setComboName] = useState('');
   const [myCombos, setMyCombos] = useState<{ id: string; name: string; items: { food: Food; portionType: 'serving' | 'katori' | 'grams'; portionValue: number }[] }[]>([]);
   const [comboMsg, setComboMsg] = useState<string | null>(null);
+  // P6-a: recipes - load into the tray exactly like a combo (one FoodEntry per
+  // ingredient at save time), with the per-serving numbers shown on the chip.
+  const [myRecipes, setMyRecipes] = useState<{
+    id: string;
+    name: string;
+    servings: number;
+    items: { food: Food; portionType: 'serving' | 'katori' | 'grams'; portionValue: number }[];
+    nutrition: { kcal: number; carbsG: number; proteinG: number; fatG: number; fiberG: number; netCarbsG: number; grams: number; gi: number };
+  }[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   // C2: custom-foods state - Mine chip, the form mount, portion memory.
   const [mineOnly, setMineOnly] = useState(false);
@@ -109,6 +118,14 @@ export default function LogPage() {
     fetch('/api/combos')
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => { if (d?.combos) setMyCombos(d.combos); })
+      .catch(() => {});
+  }, []);
+
+  // P6-a: load user's recipes (same tolerance as combos - offline keeps what we have).
+  useEffect(() => {
+    fetch('/api/recipes')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d?.recipes) setMyRecipes(d.recipes); })
       .catch(() => {});
   }, []);
 
@@ -323,6 +340,18 @@ export default function LogPage() {
     setTray(c.items.map((x) => ({ food: x.food, portionType: x.portionType, portionValue: x.portionValue })));
     setSavedMsg(null);
     setError(null);
+  }
+
+  // P6-a: a recipe fills the tray with every ingredient at its stored portion
+  // (the combo re-log pattern). Each ingredient saves as its own FoodEntry, so
+  // history, pairing checks and the coach all see the real foods.
+  function loadRecipeIntoTray(id: string) {
+    const r = myRecipes.find((x) => x.id === id);
+    if (!r || r.items.length === 0) return;
+    setTray(r.items.map((x) => ({ food: x.food, portionType: x.portionType, portionValue: x.portionValue })));
+    setSavedMsg(null);
+    setError(null);
+    setPortionHint(`${r.name}: whole recipe = ${r.servings} serving${r.servings === 1 ? '' : 's'} (${r.nutrition.kcal} kcal each). Portions below are per whole recipe - halve them to log one serving.`);
   }
 
   async function removeCombo(id: string) {
@@ -603,6 +632,28 @@ export default function LogPage() {
           </div>
         )}
 
+        {/* P6-a: recipes row - same one-tap fill as combos, per-serving numbers on the chip. */}
+        {myRecipes.length > 0 && (
+          <div className="mb-2">
+            <p className="text-xs font-medium text-neutral-500">My recipes - per serving shown:</p>
+            <div className="mt-2 -mx-1 overflow-x-auto px-1 pb-1">
+              <div className="flex gap-2">
+                {myRecipes.map((r) => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => loadRecipeIntoTray(r.id)}
+                    title={`${r.items.length} ingredients - loads the whole recipe; halve portions for one serving`}
+                    className="shrink-0 rounded-full border border-violet-200 bg-violet-50/50 px-3 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-100 dark:border-violet-800 dark:bg-violet-950/30 dark:text-violet-300"
+                  >
+                    {r.name} · {r.nutrition.kcal} kcal/serv
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Category chips */}
         <div className="mt-6 -mx-1 overflow-x-auto px-1 pb-1">
           <div className="flex gap-2">
@@ -658,6 +709,43 @@ export default function LogPage() {
               No {(REGION_LABELS as Record<string, string | undefined>)[region] ?? 'regional'} matches for &quot;{query}&quot; - showing matches from all regions.
             </p>
           )}
+
+          {/* P6-a: recipe names surface in search - matching by recipe name or
+              any ingredient name; one tap loads all ingredients into the tray. */}
+          {(() => {
+            const q = query.trim().toLowerCase();
+            if (!q) return null;
+            const hits = myRecipes.filter(
+              (r) =>
+                r.name.toLowerCase().includes(q) ||
+                r.items.some((it) => it.food.name.toLowerCase().includes(q)),
+            ).slice(0, 3);
+            if (hits.length === 0) return null;
+            return (
+              <ul className="mt-3 rounded-lg border border-violet-200 dark:border-violet-800">
+                {hits.map((r) => (
+                  <li key={'recipe-' + r.id}>
+                    <button
+                      onClick={() => loadRecipeIntoTray(r.id)}
+                      className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm hover:bg-violet-50 dark:hover:bg-violet-950/30"
+                    >
+                      <span>
+                        <span aria-hidden className="mr-1.5">🍳</span>
+                        <span className="font-medium">{r.name}</span>
+                        <span className="ml-2 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
+                          recipe
+                        </span>
+                        <span className="ml-2 text-xs text-neutral-400">
+                          {r.items.length} ingredients · {r.nutrition.kcal} kcal/serving · {r.servings} serving{r.servings === 1 ? '' : 's'}
+                        </span>
+                      </span>
+                      <span className="text-xs font-medium text-violet-600 dark:text-violet-300">Load recipe</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            );
+          })()}
 
           {results.length > 0 && (
             <ul className="mt-3 max-h-72 overflow-y-auto rounded-lg border border-neutral-200 dark:border-neutral-800">

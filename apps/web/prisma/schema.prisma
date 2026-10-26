@@ -85,6 +85,7 @@ model User {
   savedCombos      SavedCombo[]
   settings         UserSettings?
   labs             Lab[]
+  recipes          Recipe[]
   meds      Medication[]
   dayTags          DayContextTag[]
   insights          InsightCard[]
@@ -310,6 +311,25 @@ model Lab {
   createdAt   DateTime @default(now())
 
   @@index([userId, testType, performedAt])
+}
+
+/// P6-a: user recipes - named multi-ingredient meals with per-serving nutrition
+/// computed at read time (never stored). items JSON shape mirrors SavedCombo:
+/// [{foodId, portionType, portionValue}]. Logging expands into one FoodEntry per
+/// ingredient (frozen numbers, same /api/meals path); no reference lock needed.
+/// (P6-d/P6-f add LabPanel/LabResult/ReportDocument on top of this schema;
+/// the wave lands as ONE additive migration 0005 - see that commit.)
+model Recipe {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  name      String
+  servings  Float
+  items     String   // JSON [{foodId, portionType, portionValue}]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }
 
 /// Phase 2c: medications — adherence display only.
