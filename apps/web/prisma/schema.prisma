@@ -87,6 +87,7 @@ model User {
   labs             Lab[]
   recipes          Recipe[]
   labPanels        LabPanel[]
+  reportDocuments  ReportDocument[]
   meds      Medication[]
   dayTags          DayContextTag[]
   insights          InsightCard[]
@@ -374,6 +375,28 @@ model LabResult {
 
   @@unique([panelId, testKey])
   @@index([userId, testKey, performedAt])
+}
+
+/// P6-f: report documents vault - the A–E master folder. Binary lives as
+/// base64 in the DB (the only zero-dep option on Vercel's ephemeral FS;
+/// @vercel/blob is the scale-up path only if the user approves the dep).
+/// displayName follows the user's standard: YYYY-MM-DD_[Category]_[TestName]_[PatientName].ext
+model ReportDocument {
+  id          String   @id @default(cuid())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  category    String   // 'diabetes' | 'cardio' | 'organ' | 'nutrition' | 'screening'
+  testKey     String?  // optional link into the lab catalog (labs.ts)
+  displayName String   // standard filename, sanitized
+  mimeType    String   // 'application/pdf' | 'image/jpeg' | 'image/png'
+  sizeBytes   Int
+  dataBase64  String
+  panelId     String?  // optional link to a LabPanel
+  performedAt String?  // YYYY-MM-DD
+  note        String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId, category])
 }
 
 /// Phase 2c: medications — adherence display only.

@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import AppShell from '@/components/AppShell';
+import PatientDocuments from '@/components/PatientDocuments';
 
 export default async function FamilyPage() {
   const session = await getServerSession(authOptions);
@@ -64,6 +65,23 @@ export default async function FamilyPage() {
             </div>
           ))}
         </div>
+
+        {/* P6-f: the ward's report documents (A–E folders) + latest-panel summary.
+            Real relationships only - the sample cards above share nothing. */}
+        {relationships.length > 0 && (
+          <div className="mt-8">
+            <h2 className="text-lg font-semibold">Reports &amp; documents</h2>
+            <p className="mt-1 text-sm text-neutral-500">
+              Your wards&apos; uploaded lab reports and screening documents, in their A–E master folders - so a
+              doctor visit means one folder, not a shoebox of printouts.
+            </p>
+            <div className="mt-2 space-y-4">
+              {relationships.map((r) => (
+                <PatientDocuments key={r.id} userId={r.wardId} whose={r.ward.name ?? r.ward.email} />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </AppShell>
   );

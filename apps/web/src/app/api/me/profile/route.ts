@@ -27,6 +27,10 @@ export async function GET() {
     isPrior: u.learnedModel ? u.learnedModel.isPrior : true,
     sampleSize: u.learnedModel ? u.learnedModel.sampleSize : 0,
     goals: safeParse(u.goals),
+    // P6-f: the vault previews the standard document filename client-side;
+    // the patient-name token comes from here (server stays the source of truth).
+    name: u.name ?? null,
+    email: u.email ?? null,
   });
 }
 

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import AppShell from '@/components/AppShell';
+import PatientDocuments from '@/components/PatientDocuments';
 
 export default async function DoctorPage() {
   const session = await getServerSession(authOptions);
@@ -12,6 +13,7 @@ export default async function DoctorPage() {
   const links = await prisma.doctorPatientLink.findMany({
     where: { doctorId: session.user.id },
     include: { patient: { include: { glucoseReadings: { orderBy: { takenAt: 'desc' }, take: 14 } } } },
+    orderBy: { createdAt: 'asc' },
   });
 
   // Sample roster so the portal is explorable without linked patients.
@@ -80,6 +82,23 @@ export default async function DoctorPage() {
             Export patient PDFs
           </Link>
         </div>
+
+        {/* P6-f: per-patient report documents vault (A–E folders) + latest-panel
+            comparison summary. Real links only - the sample roster shares nothing. */}
+        {links.length > 0 && (
+          <div className="mt-8">
+            <h2 className="text-lg font-semibold">Reports &amp; documents</h2>
+            <p className="mt-1 text-sm text-neutral-500">
+              Your linked patients&apos; uploaded reports, organized in their A–E master folders, with the standard
+              filenames on download.
+            </p>
+            <div className="mt-2 space-y-4">
+              {links.map((l) => (
+                <PatientDocuments key={l.id} userId={l.patientId} whose={l.patient.name ?? l.patient.email} />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </AppShell>
   );
