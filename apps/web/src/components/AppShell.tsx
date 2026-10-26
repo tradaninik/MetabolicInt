@@ -13,7 +13,7 @@ const NAV = [
   { href: '/healing-foods', label: 'Food as Medicine' },
   { href: '/log', label: 'Log a meal' },
   { href: '/my-foods', label: 'My Foods' },
-  { href: '/coach', label: 'AI Coach' },
+  // P6-b: coach + insights unified into the single Insights tab (/coach redirects).
   { href: '/insights', label: 'Insights' },
   { href: '/indian', label: 'Indian MI' },
   { href: '/glucose', label: 'Glucose' },
