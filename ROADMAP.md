@@ -78,3 +78,14 @@ New tracks (approved direction 2026-10-24; revised same day - user correction: P
 - P5-b: bottom tab bar (Home/Log/Foods/Insights + More sheet, 56px cells, safe-area); sw.js v3 offline shell with static /offline fallback; IndexedDB offline meal queue replaying exact /api/meals bodies (server rejections never queued, 5-attempt drop with surfaced warning); sync badge in AppShell.
 - Tradition lens: optional TraditionLensData on HealingFood (content-only, ranking untouched); 14/16 dataset entries carry classical sources (hedged), traditional forms and 1-4 practices; amber "Ancient practice" section on food profiles; server-rendered 8-practice "Ancient practices" card on /healing-foods, source-labeled (classical text / classical kitchen / household tradition).
 - Suite 37 files / 381 tests green; build clean (47 routes, only the pre-existing /log img warning). Zero migration; no package.json changes. Smoke checklist in WORKLOG.
+
+<!-- P6:shipped -->
+## P6 - Recipes, unified Insights, A-E labs + import + comparison + document vault - shipped 2026-10-26
+
+- P6-a: recipes in My Foods (multi-ingredient, exact per-serving nutrition computed at read time, one-tap logging as one FoodEntry per ingredient); three-concept copy (single foods / recipes / saved plates).
+- P6-b: coach + insights unified into one /insights tab ("Patterns | Ask coach"); /coach redirects.
+- P6-d: the user's A-E lab catalog (engine labs.ts, data-driven: 33 numeric + 9 document tests, Indian aliases, display-only ranges, direction field, HOMA-IR/non-HDL/CKD-EPI-2021 derivations); LabPanel/LabResult with hba1c dual-write into the legacy Lab trend; /labs = A-E accordion entry + panel history + per-test trends, CGM/BP linked not duplicated.
+- P6-c: deterministic report import (paste text or CSV; zero deps, no OCR by design - photo import is an explicit P7 decision); review-then-save with manual mapping for unmatched lines.
+- P6-e: report-to-report comparison (deltas + direction colors + derived markers; between-reports context over meals/activity/sleep/weight/glucose/CGM/meds/BP; hedged association notes, never causes).
+- P6-f: report documents vault - A-E master folders, 4 MB/200-file/50-MB caps, standard filename YYYY-MM-DD_[Category]_[TestName]_[PatientName].ext, base64-in-DB storage (zero deps), download/inline serving, doctor + caregiver portal views.
+- Migration 0005 (additive, whole wave). Suite 41 files / 430 tests green; live API e2e (22 checks) all pass incl. a real 3.5 MB PDF byte-identical round-trip. Deferred decisions for P7: photo/scan import (OCR dependency), @vercel/blob scale-up, JSON-backup coverage of the new tables (needs an export-tables test update), Android APK (feasibility-gated Capacitor/TWA workstream; PWA install already works via /install).
