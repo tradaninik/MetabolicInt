@@ -10,13 +10,13 @@ import { NextResponse } from 'next/server';
 import { getSessionUserId } from '@/lib/session-user';
 import { prisma } from '@/lib/prisma';
 import { istNow } from '@/lib/clinical-db';
-import { LAB_CATEGORIES, LAB_TEST_MAP, reportFileName } from '@mi/engine';
+import { LAB_CATEGORIES, LAB_TEST_MAP, PRESCRIPTION_CATEGORY, reportFileName } from '@mi/engine';
 
 const MAX_FILE_BYTES = 4 * 1024 * 1024; // 4 MB
 const MAX_FILES = 200;
 const MAX_TOTAL_BYTES = 50 * 1024 * 1024; // 50 MB
 const ALLOWED_MIME = new Set(['application/pdf', 'image/jpeg', 'image/png']);
-const CATEGORY_IDS = new Set<string>(LAB_CATEGORIES.map((c) => c.id));
+const CATEGORY_IDS = new Set<string>([...LAB_CATEGORIES.map((c) => c.id), PRESCRIPTION_CATEGORY.id]);
 
 const LIST_SELECT = {
   id: true,
@@ -88,7 +88,7 @@ export async function POST(req: Request) {
 
   const category = String(form.get('category') ?? '');
   if (!CATEGORY_IDS.has(category)) {
-    return NextResponse.json({ error: 'Pick a folder (A–E) for this document.' }, { status: 400 });
+    return NextResponse.json({ error: 'Pick a folder (A–E, or Prescriptions) for this document.' }, { status: 400 });
   }
   const testKeyRaw = form.get('testKey');
   const testKey = typeof testKeyRaw === 'string' && testKeyRaw && LAB_TEST_MAP[testKeyRaw] ? testKeyRaw : null;

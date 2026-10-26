@@ -79,6 +79,20 @@ export default function InstallPage() {
         your logged data stays exactly where it is.
       </p>
 
+      {/* Page hero (P7-b): pre-optimized WebP, 12KB. Eager: it is the page visual. */}
+      <div className="mt-6 flex justify-center">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/images/install-hero.webp"
+          alt="Illustration of a phone with the Metabolic app icon on its home screen"
+          width={200}
+          height={200}
+          loading="eager"
+          decoding="async"
+          className="rounded-2xl"
+        />
+      </div>
+
       {/* QR: only useful from a desktop screen (scan with the phone). */}
       {platform === 'desktop' && (
         <section className="mt-6 rounded-2xl border border-neutral-200 p-5 dark:border-neutral-800">
@@ -130,10 +144,25 @@ export default function InstallPage() {
                   </button>
                 </>
               ) : (
-                <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-                  If the button doesn&apos;t appear, use the browser menu (⋮) → <b>Add to Home screen</b> /{' '}
-                  <b>Install app</b>.
-                </p>
+                <div>
+                  <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+                    If the button doesn&apos;t appear, use the browser menu (⋮) → <b>Add to Home screen</b>{' '}
+                    / <b>Install app</b>.
+                  </p>
+                  <p className="mt-3 text-xs font-medium text-neutral-500">
+                    Still not showing? A calm, quick check:
+                  </p>
+                  <ul className="mt-1.5 list-disc space-y-1 pl-5 text-xs text-neutral-600 dark:text-neutral-400">
+                    <li>
+                      Being signed in doesn&apos;t matter - installing works with or without an account.
+                    </li>
+                    <li>Use Chrome or Edge on your Android phone - other browsers may not offer install.</li>
+                    <li>
+                      Make sure you&apos;re on the real Metabolic site URL, opened straight in the browser
+                      (not inside another app).
+                    </li>
+                  </ul>
+                </div>
               )}
             </section>
           )}

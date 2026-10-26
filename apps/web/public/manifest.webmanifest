@@ -1,4 +1,5 @@
 {
+  "id": "/",
   "name": "Metabolic Intelligence",
   "short_name": "Metabolic",
   "description": "Personal metabolic companion: educational guidance for blood sugar and healthy lifestyle. Not medical advice — always consult your clinician.",
@@ -19,7 +20,13 @@
       "src": "/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }

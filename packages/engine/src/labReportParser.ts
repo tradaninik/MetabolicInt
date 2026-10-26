@@ -47,7 +47,7 @@ export interface LabParseResult {
   format: 'text' | 'csv';
 }
 
-const UNIT_RE = /^(?:mg\/dl|mg\/d l|mg%|ug\/dl|µg\/dl|ng\/ml|ng\/d l|pg\/ml|u\/l|iu\/l|uiu\/ml|µu\/ml|uu\/ml|miu\/l|mmol\/l|g\/dl|gm\/dl|%|percent|mmol\/mol|m\/mol|mg\/g|ug\/g|nmol\/l|pmol\/l|ml\/min|ml\/min\/1.73m2|iu\/ml|u\/ml|ng\/dl)$/i;
+const UNIT_RE = /^(?:mg\/dl|mg\/d l|mg%|mg\/l|ug\/dl|µg\/dl|ng\/ml|ng\/d l|pg\/ml|u\/l|iu\/l|uiu\/ml|µiu\/ml|μiu\/ml|µu\/ml|uu\/ml|miu\/l|mmol\/l|g\/dl|gm\/dl|%|percent|mmol\/mol|m\/mol|mg\/g|ug\/g|nmol\/l|pmol\/l|ml\/min|ml\/min\/1.73m2|iu\/ml|u\/ml|ng\/dl)$/i;
 
 const LAB_CHAINS = ['thyrocare', 'metropolis', 'dr lal', 'lal pathlabs', 'lal path labs', 'srl', 'apollo', 'nutrica', 'vlcc', 'healthians', 'redcliffe', 'cadila', 'neuberg'];
 
@@ -55,8 +55,14 @@ const HEADER_HINTS = [
   'test name', 'test parameter', 'parameter', 'investigation', 'observation',
   'result', 'value', 'unit', 'reference range', 'ref range', 'biological ref',
   'reference interval', 'specimen', 'sample', 'patient', 'age', 'gender',
-  'referred by', 'collected', 'received', 'reported', 'accession', 'barcode',
+  'referred by', 'ref. by', 'ref by', 'collected', 'received', 'reported',
+  'released', 'registered', 'accession', 'barcode',
   'method', 'technolog', ' printed', 'page ', 'www.', 'terms and conditions',
+  // Reference-range legend + assay-boilerplate lines (never test rows):
+  'male :', 'female :', 'adult :', 'adults :', 'normal :', 'deficiency',
+  'insufficiency', 'sufficiency', 'toxicity', 'intra assay', 'inter assay',
+  'specifications', '%cv', 'precision', 'sensitivity:', 'standardization',
+  'correlate with clinical', 'yrs :', 'years :', 'menopause', 'months :',
 ];
 
 /** Date coercion: dd/mm/yyyy, dd-mm-yyyy, dd.mm.yy, yyyy-mm-dd -> YYYY-MM-DD. */
@@ -80,11 +86,37 @@ function iso(y: string, mo: string, d: string): string | undefined {
   return `${yy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
 }
 
-/** Extract a report date + lab chain from prose lines (best effort). */
+const MONTHS: Record<string, number> = {
+  jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
+  jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
+};
+
+/** "17 Jan 2021", "17-Jan-2021"-style dates - Indian labs print these in
+ * "Sample Collected on (SCT) : 17 Jan 2021 07:16" lines. */
+const DATE_MON = /(\d{1,2})\s*[-/ ]\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*[-,/ ]\s*(\d{2,4})/i;
+
+/** Any date format after a date-word -> ISO, or undefined. */
+function dateFromText(rest: string): string | undefined {
+  const mon = DATE_MON.exec(rest);
+  if (mon) {
+    const mo = MONTHS[mon[2].slice(0, 3).toLowerCase()];
+    const yy = mon[3].length === 2 ? `20${mon[3]}` : mon[3];
+    if (mo) return iso(yy, String(mo), mon[1]);
+  }
+  const num = /(\d{1,4})[-/.](\d{1,2})[-/.](\d{2,4})/.exec(rest);
+  if (num) return coerceDate(num[0]); // full dd/mm/yyyy-style token
+  return undefined;
+}
+
+/** Extract a report date + lab chain from prose lines (best effort).
+ * Collection dates win over released/reported dates (that is when the blood
+ * was actually drawn); dates are only read from date-word lines so prose
+ * citations like "Clin Chem Lab Med 2000;38:1003-11" can never fake one. */
 function scanMeta(lines: string[]): { performedAt?: string; labName?: string } {
-  let performedAt: string | undefined;
+  let collectedAt: string | undefined;
+  let otherDate: string | undefined;
   let labName: string | undefined;
-  const dateWords = /(?:reported|collected|received|registered|done|date)\s*[:\-]?\s*(?:on\s*)?/i;
+  const dateWords = /(?:sample\s+)?(collected|reported|received|registered|released|done|date)\s*[:\-]?\s*(?:on\s*)?/i;
   for (const line of lines) {
     const low = line.toLowerCase();
     if (!labName) {
@@ -98,17 +130,17 @@ function scanMeta(lines: string[]): { performedAt?: string; labName?: string } {
         }
       }
     }
-    if (!performedAt) {
-      // "Reported on : 15/10/2026" / "Collected: 15-10-2026 09:14" / plain dates.
-      const dw = dateWords.exec(low);
-      const rest = dw ? line.slice((dw.index ?? 0) + dw[0].length) : line;
-      const m = /(\d{1,4}[-/.]\d{1,2}[-/.]\d{2,4})/.exec(rest);
-      if (m) {
-        performedAt = performedAt ?? coerceDate(m[1]);
+    const dw = dateWords.exec(line);
+    if (dw) {
+      const rest = line.slice((dw.index ?? 0) + dw[0].length);
+      const d = dateFromText(rest);
+      if (d) {
+        if (dw[1].toLowerCase() === 'collected') collectedAt = collectedAt ?? d;
+        else otherDate = otherDate ?? d;
       }
     }
   }
-  return { performedAt, labName };
+  return { performedAt: collectedAt ?? otherDate, labName };
 }
 
 /** Split a line into whitespace tokens, keeping range patterns glued. */
@@ -146,9 +178,14 @@ function parseRange(text: string): { refLow?: number; refHigh?: number } {
   return {};
 }
 
-/** Unit match ignoring case/space/µ-vs-u differences. */
+/** Unit match ignoring case/space/µ-vs-u differences ("gm/dl" == "g/dl"). */
 function unitLooksLike(a: string, b: string): boolean {
-  const norm = (u: string) => u.toLowerCase().replace(/\s+/g, '').replace(/µ/g, 'u').replace(/'/g, '');
+  const norm = (u: string) =>
+    u
+      .toLowerCase()
+      .replace(/\s+/g, '')
+      .replace(/µ|μ/g, 'u')
+      .replace(/gm\//g, 'g/');
   return norm(a) === norm(b) && norm(a).length > 0;
 }
 
@@ -176,11 +213,18 @@ function mapName(name: string, unit: string): { key: string; def: LabTestDef; co
       return { key: exact, def, confidence: unitOk ? 1 : 0.9 };
     }
   }
+  // Ratio/index lines ("APO B / APO A1 RATIO 0.9") only ever auto-map via an
+  // exact alias above; containment must not turn them into a component test.
+  if (/\bratio\b|\bindex\b/i.test(name)) return null;
   const candidates = labKeysContaining(name);
   if (candidates.length > 0) {
     const def = LAB_TEST_MAP[candidates[0]];
     const unitOk = !unit || !def.unit || unitLooksLike(unit, def.unit);
-    return { key: candidates[0], def, confidence: unitOk ? 0.7 : 0.55 };
+    // Containment + unit disagreement is NOT a trustworthy auto-match: a CBC
+    // "HEMOGLOBIN ... g/dL" row must not silently become hba1c (unit %).
+    // It still reaches the review screen as a manual row with a suggestion.
+    if (unitOk) return { key: candidates[0], def, confidence: 0.7 };
+    return null;
   }
   return null;
 }
@@ -254,6 +298,9 @@ function parseLine(line: string): { name: string; value: number; unit: string; r
 
 function looksLikeHeaderOrMeta(line: string): boolean {
   const low = line.toLowerCase();
+  // Address/pincode tails like "Hyderabad -500 044" (Indian 6-digit pincodes
+  // printed as two 3-digit groups after a dash) are never test rows.
+  if (/-\s?\d{3}\s+\d{3}\s*$/.test(line)) return true;
   if (!/\d/.test(line) && !/[:]/.test(line)) {
     // Pure prose without digits - only skip if it matches known header words.
     return HEADER_HINTS.some((h) => low.includes(h.trim())) || low.length < 3;

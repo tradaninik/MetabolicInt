@@ -91,9 +91,22 @@ export default function LabsPage() {
 
         {/* ---------- HbA1c trend: the first citizen (unchanged view) ---------- */}
         {loaded && trend.length === 0 && (
-          <p className="mt-6 text-sm text-neutral-500">
-            No lab results yet - add your first panel below. A trend appears from the second result onwards.
-          </p>
+          <div className="mt-6 flex flex-col items-center gap-2 text-center">
+            {/* P7-b: small illustration for the empty state; lazy (below fold). */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/images/empty-labs.webp"
+              alt="Illustration of an empty lab results page"
+              width={144}
+              height={144}
+              loading="lazy"
+              decoding="async"
+              className="h-36 w-36"
+            />
+            <p className="text-sm text-neutral-500">
+              No lab results yet - add your first panel below. A trend appears from the second result onwards.
+            </p>
+          </div>
         )}
 
         {latest && (

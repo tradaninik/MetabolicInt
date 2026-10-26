@@ -45,6 +45,21 @@ export default function HomePage() {
             See the demo dashboard
           </Link>
         </div>
+
+        {/* Hero visual (P7-b): the same fresh meal spread as the dashboard
+            banner; lazy because it sits at or below the first fold. */}
+        <div className="w-full overflow-hidden rounded-2xl border border-neutral-200 dark:border-neutral-800">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/images/hero-dashboard.webp"
+            alt="Fresh, colorful Indian meal spread"
+            width={1344}
+            height={768}
+            loading="lazy"
+            decoding="async"
+            className="h-56 w-full object-cover sm:h-72"
+          />
+        </div>
       </section>
 
       <section className="mt-24 grid gap-6 sm:grid-cols-3">

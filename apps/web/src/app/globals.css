@@ -23,3 +23,15 @@ body {
 .mi-disclaimer {
   @apply rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200;
 }
+
+/* P7-b micro-polish: brand-tinted text selection (soft in both schemes). */
+::selection {
+  background-color: rgb(22 176 119 / 0.25);
+}
+
+/* P7-b micro-polish: smooth anchor scroll, only when motion is welcome. */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}

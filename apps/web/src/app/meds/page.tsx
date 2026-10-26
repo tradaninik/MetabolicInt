@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import AppShell from '@/components/AppShell';
 import { istNow } from '@/lib/clinical-db';
 
@@ -25,6 +25,16 @@ interface Adherence {
   skipped: number;
   pending: number;
   pct: number | null;
+}
+
+interface VaultDoc {
+  id: string;
+  category: string;
+  displayName: string;
+  mimeType: string;
+  sizeBytes: number;
+  performedAt: string | null;
+  createdAt: string;
 }
 
 function parseSlots(s: string): string[] {
@@ -65,7 +75,65 @@ export default function MedsPage() {
   useEffect(() => {
     setToday(istNow().slice(0, 10));
     load();
+    loadRx();
   }, []);
+
+  // P7 - prescription documents (stored in the same vault as lab reports,
+  // under the separate "Prescriptions" category; 4 MB / PDF-JPG-PNG only).
+  const [rxDocs, setRxDocs] = useState<VaultDoc[]>([]);
+  const [rxLoaded, setRxLoaded] = useState(false);
+  const [rxBusy, setRxBusy] = useState(false);
+  const [rxError, setRxError] = useState<string | null>(null);
+  const rxFileRef = useRef<HTMLInputElement>(null);
+
+  async function loadRx() {
+    try {
+      const r = await fetch('/api/reports/documents');
+      const j = await r.json().catch(() => ({}));
+      if (r.ok) setRxDocs((j.documents ?? []).filter((d: VaultDoc) => d.category === 'prescriptions'));
+    } catch {
+      // keep whatever we already have
+    } finally {
+      setRxLoaded(true);
+    }
+  }
+
+  async function uploadRx(file: File) {
+    setRxError(null);
+    if (file.size > 4 * 1024 * 1024) {
+      setRxError('That file is over 4 MB. Most prescriptions are far smaller - try the PDF the clinic sent or a photo.');
+      return;
+    }
+    if (!['application/pdf', 'image/jpeg', 'image/png'].includes(file.type)) {
+      setRxError('Only PDF, JPG and PNG files are supported.');
+      return;
+    }
+    setRxBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('category', 'prescriptions');
+      fd.append('performedAt', istNow().slice(0, 10));
+      const r = await fetch('/api/reports/documents', { method: 'POST', body: fd });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setRxError(j.error ?? 'Could not save that file.');
+        return;
+      }
+      loadRx();
+    } finally {
+      setRxBusy(false);
+      if (rxFileRef.current) rxFileRef.current.value = '';
+    }
+  }
+
+  async function deleteRx(doc: VaultDoc) {
+    setRxError(null);
+    if (!window.confirm(`Delete "${doc.displayName}"?`)) return;
+    const r = await fetch(`/api/reports/documents/${doc.id}`, { method: 'DELETE' });
+    if (r.ok) loadRx();
+    else setRxError('Could not delete that file.');
+  }
 
   async function addMed() {
     setSaving(true);
@@ -202,6 +270,64 @@ export default function MedsPage() {
           >
             {saving ? 'Adding...' : 'Add'}
           </button>
+        </div>
+
+        {/* P7 — Prescriptions: upload the doctor's prescription (PDF or photo)
+            next to the medicine times so everything for a visit is in one
+            place. Stored in the documents vault, doctor/family-accessible. */}
+        <div className="mt-6 rounded-2xl border border-neutral-200 p-5 dark:border-neutral-800">
+          <h2 className="text-lg font-semibold">Prescriptions</h2>
+          <p className="mt-1 text-sm text-neutral-500">
+            Keep a copy of your prescription (PDF, JPG or PNG, up to 4 MB) with your medicine times - handy at
+            visits, and your linked doctor or family can see it too.
+          </p>
+          <input
+            ref={rxFileRef}
+            type="file"
+            accept="application/pdf,image/jpeg,image/png"
+            className="hidden"
+            onChange={(e) => e.target.files?.[0] && uploadRx(e.target.files[0])}
+          />
+          <button
+            onClick={() => rxFileRef.current?.click()}
+            disabled={rxBusy}
+            className="mt-3 rounded-lg border border-brand-300 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 hover:bg-brand-100 disabled:opacity-60 dark:border-brand-800 dark:bg-brand-950/30 dark:text-brand-300"
+          >
+            {rxBusy ? 'Uploading...' : 'Upload prescription'}
+          </button>
+          {rxError && <p className="mt-3 text-sm text-red-600">{rxError}</p>}
+
+          {rxLoaded && rxDocs.length > 0 && (
+            <ul className="mt-4 divide-y divide-neutral-100 rounded-xl border border-neutral-200 dark:divide-neutral-900 dark:border-neutral-800">
+              {rxDocs.map((d) => (
+                <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm">
+                  <span className="min-w-0">
+                    <a
+                      href={`/api/reports/documents/${d.id}?inline=1`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="truncate font-medium text-brand-600 hover:underline dark:text-brand-400"
+                    >
+                      {d.displayName}
+                    </a>
+                    <span className="ml-2 text-xs text-neutral-400">{Math.max(1, Math.round(d.sizeBytes / 1024))} KB</span>
+                  </span>
+                  <span className="flex items-center gap-3 text-xs">
+                    <a
+                      href={`/api/reports/documents/${d.id}`}
+                      className="text-neutral-500 hover:underline"
+                      download
+                    >
+                      Download
+                    </a>
+                    <button onClick={() => deleteRx(d)} className="text-neutral-400 hover:text-red-500">
+                      Delete
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         {loaded && active.length === 0 && (

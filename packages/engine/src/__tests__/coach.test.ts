@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { parseQuestion, answerQuestion } from '../coach';
-import type { CoachContext, Food, UserProfile } from '../types';
+import { parseQuestion, answerQuestion, type CoachContext } from '../coach';
+import type { Food, UserProfile } from '../types';
 
 const foodIndex: Record<string, Food> = {
   biryani: {

@@ -1,5 +1,5 @@
 // Offline shell - caches the app shell for PWA install and offline use.
-// v3 strategy (P5-b):
+// v4 strategy (P7-b; fetch strategy unchanged since v3):
 //   - network-first for navigations, falling back to the cached copy of that
 //     page (pages you've visited stay readable offline), then to /offline.
 //   - cache-first for hashed static assets only.
@@ -8,13 +8,22 @@
 //   - Background Sync: when connectivity returns, the SW messages open
 //     clients so the page can replay the queued meals. If no page is open
 //     (iOS, or a fully-closed app), the queue flushes on the next launch.
-const CACHE = 'mi-shell-v3';
+//   - v4 adds the real PWA icons (manifest + favicon + touch) and the
+//     install-page hero to the precache so the install flow works offline.
+const CACHE = 'mi-shell-v4';
 const SHELL = [
   '/',
   '/login',
   '/install',
   '/offline',
   '/manifest.webmanifest',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/icon-512-maskable.png',
+  '/apple-touch-icon.png',
+  '/favicon-32.png',
+  '/favicon-16.png',
+  '/images/install-hero.webp',
 ];
 
 self.addEventListener('install', (event) => {

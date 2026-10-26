@@ -36,7 +36,9 @@ export interface ParseResult {
   unmatched: ParseUnmatched[];
   performedAt?: string;
   labName?: string;
-  format: 'text' | 'csv';
+  format: 'text' | 'csv' | 'pdf';
+  /** present when a PDF was uploaded server-side (what was actually read) */
+  text?: string;
 }
 
 interface ReviewRow {
@@ -63,6 +65,38 @@ export default function ImportReport({ onSaved }: { onSaved: () => void }) {
   const [msg, setMsg] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  /** Populate the review screen from a parse result (shared by the paste
+   * and the PDF-upload paths). */
+  function applyParsed(parsed: ParseResult) {
+    if (parsed.matches.length === 0 && parsed.unmatched.length === 0) {
+      throw new Error('No test rows recognized. Check that this is the results section of the report and try again.');
+    }
+    setParsedMeta(parsed);
+    setReview(
+      parsed.matches.map((m) => ({
+        testKey: m.testKey,
+        asPrinted: m.asPrinted,
+        value: String(m.value),
+        unit: m.unit,
+        refLow: m.refLow != null ? String(m.refLow) : '',
+        refHigh: m.refHigh != null ? String(m.refHigh) : '',
+        confidence: m.confidence,
+      })),
+    );
+    setManual(
+      parsed.unmatched
+        .filter((u) => u.value != null)
+        .map((u) => ({
+          line: u.line,
+          name: u.name,
+          value: String(u.value),
+          testKey: u.suggestions[0] ?? '',
+        })),
+    );
+    setDate(parsed.performedAt ?? istNow().slice(0, 10));
+    setLabName(parsed.labName ?? '');
+  }
+
   async function parse() {
     setParsing(true);
     setError(null);
@@ -75,34 +109,7 @@ export default function ImportReport({ onSaved }: { onSaved: () => void }) {
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j.error ?? 'Could not read that text.');
-      const parsed = j as ParseResult;
-      if (parsed.matches.length === 0 && parsed.unmatched.length === 0) {
-        throw new Error('No test rows recognized. Copy the results section of the report and try again.');
-      }
-      setParsedMeta(parsed);
-      setReview(
-        parsed.matches.map((m) => ({
-          testKey: m.testKey,
-          asPrinted: m.asPrinted,
-          value: String(m.value),
-          unit: m.unit,
-          refLow: m.refLow != null ? String(m.refLow) : '',
-          refHigh: m.refHigh != null ? String(m.refHigh) : '',
-          confidence: m.confidence,
-        })),
-      );
-      setManual(
-        parsed.unmatched
-          .filter((u) => u.value != null)
-          .map((u) => ({
-            line: u.line,
-            name: u.name,
-            value: String(u.value),
-            testKey: u.suggestions[0] ?? '',
-          })),
-      );
-      setDate(parsed.performedAt ?? istNow().slice(0, 10));
-      setLabName(parsed.labName ?? '');
+      applyParsed(j as ParseResult);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not read that text.');
     } finally {
@@ -111,13 +118,42 @@ export default function ImportReport({ onSaved }: { onSaved: () => void }) {
   }
 
   async function handleFile(file: File) {
-    if (file.size > 2_000_000) {
-      setError('That file is over 2 MB - CSV exports are tiny. You may have picked a PDF; open it and copy the text instead.');
-      return;
-    }
-    const content = await file.text();
-    setText(content.slice(0, 200_000));
     setError(null);
+    setMsg(null);
+    try {
+      // PDFs (detected by magic bytes - phone pickers often omit the MIME
+      // type) are extracted server-side; raw bytes here would be mojibake.
+      const head = new Uint8Array(await file.slice(0, 5).arrayBuffer());
+      const isPdf =
+        file.type === 'application/pdf' ||
+        file.name.toLowerCase().endsWith('.pdf') ||
+        (head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46);
+      if (isPdf) {
+        if (file.size > 8 * 1024 * 1024) {
+          throw new Error('That PDF is over 8 MB. Please upload a smaller export of the same report.');
+        }
+        setParsing(true);
+        const fd = new FormData();
+        fd.append('file', file);
+        const res = await fetch('/api/lab-panels/parse', { method: 'POST', body: fd });
+        const j = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(j.error ?? 'Could not read that PDF.');
+        const parsed = j as ParseResult;
+        // Show what was actually read, so the user can verify and re-parse.
+        setText(parsed.text ?? '');
+        applyParsed(parsed);
+        return;
+      }
+      if (file.size > 2_000_000) {
+        throw new Error('That file is over 2 MB - CSV exports are tiny. You may have picked a scan or photo; those need OCR, which is not included.');
+      }
+      const content = await file.text();
+      setText(content.slice(0, 200_000));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not read that file.');
+    } finally {
+      setParsing(false);
+    }
   }
 
   function updateRow(i: number, patch: Partial<ReviewRow>) {
@@ -179,16 +215,16 @@ export default function ImportReport({ onSaved }: { onSaved: () => void }) {
       <div className="mt-6 rounded-2xl border border-neutral-200 p-5 dark:border-neutral-800">
         <h2 className="text-lg font-semibold">Import from report</h2>
         <p className="mt-1 text-sm text-neutral-500">
-          Open your lab PDF, press Ctrl+A then Ctrl+C, and paste below - or upload the CSV export. Fields pre-fill
-          for your review before anything is saved.
+          Upload your lab PDF, paste the report text, or choose a CSV/TSV export. Fields pre-fill for your review
+          before anything is saved.
         </p>
 
         {/* The honest limits of a zero-dependency app, stated up front. */}
         <p className="mt-2 rounded-lg bg-neutral-50 p-3 text-[11px] leading-relaxed text-neutral-500 dark:bg-neutral-900/40 dark:text-neutral-400">
-          <span className="font-medium">Photo or scanned-PDF auto-fill is not included.</span> Reading values out of
-          images needs OCR (a new dependency + API key), which this app deliberately avoids. Copy-paste the text
-          instead - most Indian lab PDFs are selectable. A photo-import feature can be a follow-up decision if you
-          want it.
+          <span className="font-medium">PDFs with a text layer are read automatically</span> (most lab exports:
+          Thyrocare, Metropolis, Dr Lal...). Scanned or photographed reports are not - reading values out of images
+          needs OCR (a new dependency + API key), which this app deliberately avoids. For a scan, open it, copy the
+          text and paste it, or store the file in the Documents vault.
         </p>
 
         {!review && (
@@ -209,15 +245,16 @@ export default function ImportReport({ onSaved }: { onSaved: () => void }) {
                 {parsing ? 'Reading...' : 'Read report'}
               </button>
               <label className="text-xs text-neutral-500">
-                or upload CSV/TSV:
+                or upload PDF/CSV/TSV:
                 <input
                   ref={fileRef}
                   type="file"
-                  accept=".csv,.tsv,.txt,text/csv,text/plain"
+                  accept=".pdf,.csv,.tsv,.txt,application/pdf,text/csv,text/plain"
                   className="ml-2 text-xs"
                   onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
                 />
               </label>
+              {parsing && <span className="text-xs text-neutral-400">Reading...</span>}
             </div>
           </>
         )}

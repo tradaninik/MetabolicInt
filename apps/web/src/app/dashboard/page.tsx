@@ -33,6 +33,28 @@ export default async function DashboardPage() {
   return (
     <AppShell>
       <div className="mx-auto max-w-6xl">
+        {/* Hero banner (P7-b): the page's one eager image (pre-optimized WebP,
+            125KB). The gradient scrim keeps the greeting readable over any part
+            of the photo, in light and dark schemes alike. */}
+        <div className="relative mb-6 h-40 overflow-hidden rounded-2xl sm:h-52">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/images/hero-dashboard.webp"
+            alt="Fresh, colorful Indian meal spread"
+            width={1344}
+            height={768}
+            loading="eager"
+            fetchPriority="high"
+            decoding="async"
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/55 to-transparent" aria-hidden="true" />
+          <div className="absolute inset-x-0 bottom-0 p-4 sm:p-5">
+            <p className="text-lg font-semibold text-white sm:text-xl">Eat well, log simply, feel clearer.</p>
+            <p className="mt-0.5 text-sm text-white/85">Your foods, labs and habits - one calm place.</p>
+          </div>
+        </div>
+
         {/* Header */}
         <div className="mb-6 flex flex-wrap items-end justify-between gap-2">
           <div>

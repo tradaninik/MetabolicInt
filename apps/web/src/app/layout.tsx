@@ -9,6 +9,12 @@ export const metadata: Metadata = {
     'An explainable personal metabolic model that learns how your body responds to food, sleep, activity, and lifestyle. Focused on diabetes, obesity, and preventive health.',
   applicationName: 'Metabolic Intelligence',
   manifest: '/manifest.webmanifest',
+  // P7-b: real favicons + touch icons (previously 1x1 placeholders, which also
+  // blocked Chrome's PWA installability check).
+  icons: {
+    icon: ['/favicon-32.png', '/favicon-16.png', { url: '/icon-192.png', sizes: '192x192', type: 'image/png' }],
+    apple: '/apple-touch-icon.png',
+  },
   appleWebApp: {
     capable: true,
     title: 'Metabolic Intelligence',

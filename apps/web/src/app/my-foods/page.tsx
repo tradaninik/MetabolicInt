@@ -19,6 +19,7 @@ import { findTasteByName, findHealingFoodByName } from '@mi/food-db';
 import { doshaFoodAdvice, recipeNutrition, type Food, type RecipeItemInput } from '@mi/engine';
 import Link from 'next/link';
 import AppShell from '@/components/AppShell';
+import AddCustomFood from '@/components/AddCustomFood';
 
 type CustomFood = {
   id: string;
@@ -53,6 +54,10 @@ export default function MyFoodsPage() {
   const [loaded, setLoaded] = useState(false);
   const [banner, setBanner] = useState('');
   const [editing, setEditing] = useState<CustomFood | null>(null);
+  // P7: the foods tab had no create entry point of its own (only /log had one),
+  // which read as "how do I even add my food here?" - same inline-creator
+  // pattern the recipes tab already uses.
+  const [foodCreator, setFoodCreator] = useState(false);
 
   // Recipes state
   const [recipes, setRecipes] = useState<RecipeRow[]>([]);
@@ -163,12 +168,40 @@ export default function MyFoodsPage() {
       {tab === 'foods' && (
         <>
           {!loaded && <p role="status" className="mt-6 text-sm text-neutral-500">Loading...</p>}
-          {loaded && foods.length === 0 && (
-            <p className="mt-6 text-sm text-neutral-500">
-              Nothing here yet. Add your own food from{' '}
-              <Link href="/log" className="text-brand-600 underline dark:text-brand-400">Log a meal</Link>{' '}
-              - search something, then &quot;Add your own food&quot;.
-            </p>
+          {loaded && foods.length === 0 && !foodCreator && (
+            <div className="mt-6 rounded-2xl border border-dashed border-neutral-300 p-6 text-center dark:border-neutral-700">
+              <p className="text-sm text-neutral-500">No foods of your own yet.</p>
+              <p className="mt-1 text-xs text-neutral-400">
+                Add the foods you actually eat with their per-100g numbers (paste a packet label if you have it), or
+                add one later from{' '}
+                <Link href="/log" className="text-brand-600 underline dark:text-brand-400">Log a meal</Link>{' '}
+                while logging.
+              </p>
+              <button
+                onClick={() => { setFoodCreator(true); setBanner(''); }}
+                className="mt-3 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700"
+              >
+                Add your first food
+              </button>
+            </div>
+          )}
+
+          {(loaded && foods.length > 0 && !editing && !foodCreator) && (
+            <button
+              onClick={() => { setFoodCreator(true); setBanner(''); }}
+              className="mt-4 rounded-lg border border-brand-300 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 hover:bg-brand-100 dark:border-brand-800 dark:bg-brand-950/30 dark:text-brand-300"
+            >
+              + New food
+            </button>
+          )}
+
+          {foodCreator && (
+            <div className="mt-4">
+              <AddCustomFood
+                onCreated={() => { setFoodCreator(false); load(); setBanner(''); }}
+                onCancel={() => setFoodCreator(false)}
+              />
+            </div>
           )}
 
           {loaded && foods.length > 0 && (

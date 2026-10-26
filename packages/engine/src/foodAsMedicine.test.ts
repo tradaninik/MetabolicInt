@@ -11,6 +11,7 @@ import {
   validateHealingFood,
   rankHealingFoods,
   type HealingFood,
+  type HealingFoodCategory,
 } from './foodAsMedicine';
 
 function makeFood(overrides: Partial<HealingFood> = {}): HealingFood {

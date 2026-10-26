@@ -93,6 +93,21 @@ export const LAB_CATEGORY_BY_LETTER: Record<LabCategoryLetter, LabReportCategory
   LAB_CATEGORIES.map((c) => [c.letter, c]),
 ) as Record<LabCategoryLetter, LabReportCategory>;
 
+/** P7 — Prescriptions share the documents vault but are NOT part of the A–E
+ * lab master (tests pin LAB_CATEGORIES to exactly A–E, and the lab surfaces
+ * are data-driven off it). The Meds page uploads against this category id
+ * and the vault API accepts it alongside A–E. */
+export const PRESCRIPTION_CATEGORY: Omit<LabReportCategory, 'id' | 'letter'> & {
+  id: 'prescriptions';
+  letter: 'P';
+} = {
+  id: 'prescriptions',
+  letter: 'P',
+  title: 'Prescriptions',
+  token: 'Prescriptions',
+  description: 'Doctor prescriptions and medicine lists uploaded from the Meds page.',
+};
+
 export const LAB_TESTS: LabTestDef[] = [
   // ---- A. Diabetes & Metabolic ----
   {
@@ -108,7 +123,7 @@ export const LAB_TESTS: LabTestDef[] = [
   {
     key: 'ppbs', label: 'Postprandial glucose (PPBS)', category: 'A', group: 'Glycemic control',
     unit: 'mg/dL', refLow: 70, refHigh: 140, direction: 'lower-better',
-    aliases: ['ppbs', 'pp blood sugar', 'postprandial glucose', 'post prandial blood sugar', 'post lunch glucose', 'post lunch blood sugar', '2hr pp', 'pp glucose'],
+    aliases: ['ppbs', 'pp blood sugar', 'postprandial glucose', 'postprandial blood sugar', 'post prandial blood sugar', 'post lunch glucose', 'post lunch blood sugar', '2hr pp', 'pp glucose'],
   },
   {
     key: 'fasting_insulin', label: 'Fasting insulin', category: 'A', group: 'Insulin & resistance',
@@ -178,6 +193,21 @@ export const LAB_TESTS: LabTestDef[] = [
     aliases: ['apob', 'apo b', 'apolipoprotein b', 'apo b100'],
   },
   {
+    key: 'apo_a1', label: 'ApoA1', category: 'B', group: 'Lipid panel',
+    unit: 'mg/dL', direction: 'higher-better',
+    aliases: ['apo a1', 'apoa1', 'apolipoprotein a1', 'apo a-1'],
+  },
+  {
+    key: 'lpa', label: 'Lp(a)', category: 'B', group: 'Lipid panel',
+    unit: 'mg/dL', refHigh: 30, direction: 'lower-better',
+    aliases: ['lipoprotein a', 'lp a', 'lpa', 'lipoprotein little a'],
+  },
+  {
+    key: 'hs_crp', label: 'hs-CRP', category: 'B', group: 'Inflammation',
+    unit: 'mg/L', refHigh: 3, direction: 'lower-better',
+    aliases: ['hs crp', 'hscrp', 'high sensitivity c reactive protein', 'ultrasensitive crp', 'crp hs'],
+  },
+  {
     key: 'vldl', label: 'VLDL cholesterol', category: 'B', group: 'Lipid panel',
     unit: 'mg/dL', refLow: 5, refHigh: 40, direction: 'context',
     aliases: ['vldl', 'vldl cholesterol', 'very low density lipoprotein'],
@@ -241,6 +271,11 @@ export const LAB_TESTS: LabTestDef[] = [
     aliases: ['free t4', 'ft4', 't4 free', 'f t4'],
   },
   {
+    key: 'total_t4', label: 'Total T4', category: 'C', group: 'Thyroid',
+    unit: 'µg/dL', refLow: 4.5, refHigh: 12, direction: 'context',
+    aliases: ['total t4', 't4 total', 'total thyroxine', 'tt4', 'thyroxine total'],
+  },
+  {
     key: 'anti_tpo', label: 'Anti-TPO', category: 'C', group: 'Thyroid',
     unit: 'IU/mL', refLow: 0, refHigh: 34, direction: 'lower-better',
     aliases: ['anti tpo', 'anti tpo antibody', 'tpo antibody', 'anti thyroid peroxidase', 'antitpo'],
@@ -255,7 +290,7 @@ export const LAB_TESTS: LabTestDef[] = [
   {
     key: 'vitamin_b12', label: 'Vitamin B12', category: 'D', group: 'Vitamins',
     unit: 'pg/mL', refLow: 200, refHigh: 900, direction: 'higher-better',
-    aliases: ['vitamin b12', 'b12', 'vit b12', 'cobalamin', 's vitamin b12'],
+    aliases: ['vitamin b12', 'vitamin b-12', 'b12', 'vit b12', 'cobalamin', 's vitamin b12'],
   },
   {
     key: 'ferritin', label: 'Ferritin', category: 'D', group: 'Iron profile',
@@ -538,7 +573,9 @@ export function reportFileName(parts: {
   patientName: string;
   ext: string; // without dot, e.g. 'pdf'
 }): string {
-  const cat = LAB_CATEGORIES.find((c) => c.id === parts.category);
+  const cat =
+    LAB_CATEGORIES.find((c) => c.id === parts.category) ??
+    (parts.category === PRESCRIPTION_CATEGORY.id ? PRESCRIPTION_CATEGORY : undefined);
   const date = /^\d{4}-\d{2}-\d{2}$/.test(parts.date) ? parts.date : 'undated';
   const def = parts.testKey ? LAB_TEST_MAP[parts.testKey] : undefined;
   const testName = nameToken(def ? def.label : parts.testKey ?? 'Report') || 'Report';
