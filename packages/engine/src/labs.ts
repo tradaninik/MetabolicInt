@@ -356,13 +356,15 @@ export function labKeyForAlias(name: string): string | undefined {
   return ALIAS_INDEX.get(normalizeLabName(name));
 }
 
-/** Containment match (alias appears inside the string or vice versa) -> candidates ranked by length. */
+/** Containment match (alias appears inside the string or vice versa) -> candidates ranked by length.
+ * The alias-inside-name direction is always safe; the name-inside-alias
+ * direction needs a reasonably long name so "Hb" can't hit "hba1c". */
 export function labKeysContaining(name: string): string[] {
   const n = normalizeLabName(name);
   if (!n) return [];
   const hits: { key: string; len: number }[] = [];
   for (const [alias, key] of ALIAS_INDEX) {
-    if (alias.length >= 3 && (alias.includes(n) || n.includes(alias))) {
+    if (alias.length >= 3 && (n.includes(alias) || (n.length >= 5 && alias.includes(n)))) {
       hits.push({ key, len: alias.length });
     }
   }

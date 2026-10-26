@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import AppShell from '@/components/AppShell';
 import PanelBrowser, { type PanelView, type TrendView } from '@/components/labs/PanelBrowser';
+import ImportReport from '@/components/labs/ImportReport';
 import { istNow, a1cToEagMgDl } from '@/lib/clinical-db';
 
 interface LabRow {
@@ -33,6 +34,7 @@ export default function LabsPage() {
   const [panels, setPanels] = useState<PanelView[]>([]);
   const [trends, setTrends] = useState<TrendView[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [tab, setTab] = useState<'panels' | 'import'>('panels');
 
   const load = useCallback(async () => {
     try {
@@ -63,6 +65,13 @@ export default function LabsPage() {
   const latest = trend.at(-1);
   const prev = trend.length >= 2 ? trend[trend.length - 2] : null;
   const delta = latest && prev ? latest.a1cPercent - prev.a1cPercent : null;
+
+  const segBtn = (active: boolean) =>
+    `flex-1 rounded-lg px-3 py-2 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 ${
+      active
+        ? 'bg-brand-600 text-white'
+        : 'border border-neutral-300 text-neutral-700 hover:border-brand-400 dark:border-neutral-700 dark:text-neutral-300'
+    }`;
 
   return (
     <AppShell>
@@ -174,8 +183,18 @@ export default function LabsPage() {
           </details>
         )}
 
-        {/* ---------- A–E panels: entry, history, trends ---------- */}
-        <PanelBrowser panels={panels} trends={trends} onSaved={load} />
+        {/* ---------- A–E panels: entry, history, trends + import ---------- */}
+        <div className="mt-8 flex gap-2" role="tablist" aria-label="Labs sections">
+          <button role="tab" aria-selected={tab === 'panels'} onClick={() => setTab('panels')} className={segBtn(tab === 'panels')}>
+            Panels &amp; trends
+          </button>
+          <button role="tab" aria-selected={tab === 'import'} onClick={() => setTab('import')} className={segBtn(tab === 'import')}>
+            ⤵ Import report
+          </button>
+        </div>
+
+        {tab === 'panels' && <PanelBrowser panels={panels} trends={trends} onSaved={load} />}
+        {tab === 'import' && <ImportReport onSaved={load} />}
       </div>
     </AppShell>
   );
