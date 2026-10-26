@@ -64,24 +64,55 @@ export interface DashboardData {
 }
 
 export async function loadDashboardData(userId: string): Promise<DashboardData | null> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    include: {
-      foodEntries: { orderBy: { loggedAt: 'desc' }, take: 200 },
-      glucoseReadings: { orderBy: { takenAt: 'desc' }, take: 200 },
-      weightEntries: { orderBy: { takenAt: 'desc' }, take: 60 },
-      sleepEntries: { orderBy: { wokeAt: 'desc' }, take: 30 },
-      activityEntries: { orderBy: { at: 'desc' }, take: 60 },
-      bpEntries: { orderBy: { takenAt: 'desc' }, take: 30 },
-      learnedModel: true,
-    },
-  });
+  // S-1 perf: the user row (with relations) and the merged food index are
+  // independent queries - run them concurrently instead of paying a full
+  // server<->DB round trip between them. Column lists are explicit (lean
+  // selects) so 200-meal histories don't drag every column over the wire.
+  const [user, foodIndex] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        foodEntries: {
+          orderBy: { loggedAt: 'desc' },
+          take: 200,
+          select: {
+            id: true, foodId: true, portionType: true, portionValue: true, grams: true,
+            kcal: true, carbsG: true, proteinG: true, fatG: true, loggedAt: true,
+          },
+        },
+        glucoseReadings: {
+          orderBy: { takenAt: 'desc' },
+          take: 200,
+          select: { value: true, takenAt: true },
+        },
+        weightEntries: {
+          orderBy: { takenAt: 'desc' },
+          take: 60,
+          select: { kg: true, takenAt: true },
+        },
+        sleepEntries: {
+          orderBy: { wokeAt: 'desc' },
+          take: 30,
+          select: { hours: true, wokeAt: true },
+        },
+        activityEntries: {
+          orderBy: { at: 'desc' },
+          take: 60,
+          select: { type: true, durationMin: true, at: true },
+        },
+        bpEntries: {
+          orderBy: { takenAt: 'desc' },
+          take: 30,
+          select: { systolic: true, diastolic: true, takenAt: true },
+        },
+        learnedModel: {
+          select: { sensitivityMgDlPerGCarb: true, isPrior: true, sampleSize: true },
+        },
+      },
+    }),
+    mergedFoodIndex(userId),
+  ]);
   if (!user) return null;
-
-  // F8: merged engine index - catalog plus this user's custom foods - so
-  // timeline labels and insights know custom food names. The engine itself
-  // stays frozen: this is still just a foodIndex parameter.
-  const foodIndex = await mergedFoodIndex(userId);
 
   const profile = toUserProfile(user);
   const conditions: string[] = safeParse(user.conditions);

@@ -17,9 +17,13 @@ export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) redirect('/login?callbackUrl=/dashboard');
 
-  const data = await loadDashboardData(session.user.id);
+  // S-1 perf: the dashboard payload and the pending check-ins are independent
+  // DB reads - run them together instead of back to back.
+  const [data, pendingCheckIns] = await Promise.all([
+    loadDashboardData(session.user.id),
+    getPendingCheckIns(session.user.id),
+  ]);
   if (!data) redirect('/onboarding');
-  const pendingCheckIns = await getPendingCheckIns(session.user.id);
 
   const { healthScore: hs, dailySummary: daily, profile, sensitivity, isPrior } = data;
   const sub = hs.components;

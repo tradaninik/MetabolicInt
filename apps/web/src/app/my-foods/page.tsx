@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { findTasteByName, findHealingFoodByName } from '@mi/food-db';
 import { doshaFoodAdvice } from '@mi/engine';
 import Link from 'next/link';
+import AppShell from '@/components/AppShell';
 
 type Food = {
   id: string;
@@ -81,7 +82,11 @@ export default function MyFoodsPage() {
   const chip = 'rounded-full bg-neutral-100 px-2.5 py-0.5 text-xs text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300';
   const action = 'rounded-lg px-3 py-1.5 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600';
 
+// S-1: wrapped in AppShell like every authed page - restores the sidebar,
+// mobile navigation and the medical disclaimer footer this page had been
+// silently missing since it was created (pinned by appshell-wiring.test.ts).
   return (
+    <AppShell>
     <div className="mx-auto max-w-2xl">
       <h1 className="text-2xl font-semibold tracking-tight">My Foods</h1>
       <p className="mt-1 text-sm text-neutral-500">Foods you created - searchable everywhere, editable, yours alone.</p>
@@ -192,5 +197,6 @@ export default function MyFoodsPage() {
         </ul>
       )}
     </div>
+    </AppShell>
   );
 }
