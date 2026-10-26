@@ -13,13 +13,12 @@ import { join, dirname, relative } from 'node:path';
 
 const WEB_ROOT = join(__dirname, '..', '..', '..', 'src', 'app');
 
-/** Pages that are intentionally public and must NOT be forced into AppShell.
- *  (P5-a adds install/page.tsx and P5-b adds offline/page.tsx here.) */
 const PUBLIC_PAGES = new Set([
   'page.tsx', // marketing/landing at /
   join('login', 'page.tsx'),
   join('onboarding', 'page.tsx'),
   join('install', 'page.tsx'), // P5-a - reachable pre-login so the app can be installed first
+  join('offline', 'page.tsx'), // P5-b - static offline fallback, must work with no session
 ]);
 
 function listPages(dir: string): string[] {

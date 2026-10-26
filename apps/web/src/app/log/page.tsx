@@ -27,6 +27,7 @@ import {
 import { FOOD_INDEX, REGION_LABELS, tasteOf, viruddhaTagsOf, findViruddhaTagsByName } from '@mi/food-db'; // C2: FOOD_INDEX for the placeholder count
 import { classifyMealType } from '@/lib/meal-bits';
 import { PLATES, getPlateItems } from '@/lib/plates';
+import { enqueueMeals, registerMealSync } from '@/lib/offlineQueue'; // P5-b: offline meal queue
 
 interface TrayItem {
   food: Food;
@@ -85,6 +86,7 @@ export default function LogPage() {
   const [photoPath, setPhotoPath] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
+  const [offlineSavedMsg, setOfflineSavedMsg] = useState<string | null>(null); // P5-b
   const [error, setError] = useState<string | null>(null);
   const [postMeal, setPostMeal] = useState<{ loggedAt: number; name: string; dueAt: number } | null>(null);
   // P4c-b / U17: educational banner after saving a meal deep in a low-agni IST window.
@@ -407,6 +409,7 @@ export default function LogPage() {
     setSaving(true);
     setError(null);
     setSavedMsg(null);
+    setOfflineSavedMsg(null);
     setAgniBanner(null);
     setViruddhaBanner(null);
     const label = trayLabel();
@@ -495,7 +498,46 @@ export default function LogPage() {
       setWhenMin(0);
       if (fileRef.current) fileRef.current.value = '';
       window.dispatchEvent(new Event('meals-updated'));
-    } catch {
+    } catch (err) {
+      // P5-b: a network-level failure (fetch TypeError - offline, flaky
+      // mobile data) queues the unsaved items on-device and replays them
+      // automatically. A server rejection (bad data, auth) is NOT offline -
+      // queueing it would retry a meal the server already refused.
+      const remaining = tray.slice(savedCount);
+      const isNetworkFailure = err instanceof TypeError;
+      if (isNetworkFailure && remaining.length > 0) {
+        try {
+          const n = await enqueueMeals(
+            remaining.map((it, idx) => ({
+              foodName: it.food.name,
+              body: {
+                foodId: it.food.id,
+                portionType: it.portionType,
+                portionValue: it.portionValue,
+                // photo/notes ride the first item only - same as the online path.
+                ...(savedCount === 0 && idx === 0 ? { photoPath, notes } : {}),
+                loggedAt,
+              },
+            })),
+          );
+          setOfflineSavedMsg(
+            `Offline - saved ${n} item${n === 1 ? '' : 's'} on this phone. ${n === 1 ? 'It' : 'They'} will sync automatically once you're back online.`,
+          );
+          setTray([]);
+          setQuery('');
+          setResults([]);
+          setPhotoPath(null);
+          setNotes('');
+          setWhenMin(0);
+          if (fileRef.current) fileRef.current.value = '';
+          window.dispatchEvent(new Event('mi-queue-changed'));
+          await registerMealSync(); // best-effort; online-event/launch flushes also cover it
+          return;
+        } catch {
+          // Queueing itself failed (private mode / storage full) - fall through
+          // to the honest error below.
+        }
+      }
       setTray((t) => t.slice(savedCount));
       setError(`Saved ${savedCount} of ${tray.length} items. Could not save the rest - please try again.`);
     } finally {
@@ -928,6 +970,16 @@ export default function LogPage() {
           <div className="mt-4 rounded-lg border border-brand-300 bg-brand-50 p-4 text-sm text-brand-800 dark:border-brand-800 dark:bg-brand-950/40 dark:text-brand-200">
             {savedMsg}{' '}
             <Link href="/dashboard" className="ml-1 font-medium underline">View dashboard</Link>
+          </div>
+        )}
+
+        {/* P5-b: meals queued on-device by an offline save; sync badge lives in AppShell. */}
+        {offlineSavedMsg && (
+          <div
+            role="status"
+            className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+          >
+            {offlineSavedMsg}
           </div>
         )}
 
