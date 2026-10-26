@@ -48,7 +48,7 @@ export const ANCIENT_PRACTICES: AncientPractice[] = [
     id: 'eat-settled',
     name: 'Eat sitting, settled, with attention',
     detail:
-      'The tradition asks for eating as its own act: seated, unhurried, without argument or screens (the classical list is "not while walking, standing, laughing or distracted"). How you eat is treated as part of what the food does - a stance that aged well.',
+      'The tradition asks for eating as its own act: seated, unhurried, without argument or screens (the classical list is "not while walking, standing, laughing or distracted"). How you eat belongs to what the food does - a stance that aged well.',
     source: 'classical text',
   },
   {

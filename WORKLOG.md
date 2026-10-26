@@ -64,3 +64,32 @@ S-0 prod smoke checklist (after the deploy goes green):
 1. GET /api/reports (signed in) - CSV downloads as before; ordinary rows unchanged.
 2. Optional end-to-end proof: create a custom food named =SUM(1) (or +test), log it, then download /api/reports and /api/export?table=customFoods - the cell must render as '=SUM(1) (apostrophe prefix, no formula evaluation in Excel/Sheets); delete the food afterwards.
 3. Negative values (if any are logged) still export as numbers, not text.
+
+## 2026-10-25 - R-1 shipped: healing-foods two-tier redesign + my-foods compact rows (7c0fb56, 956e268, e59c5cd)
+
+- R-1a (7c0fb56): /healing-foods rebuilt two-tier - "For you today" ranked shortlist + full category library, plus per-food profiles at /healing-foods/[slug] (lens tabs, pinned debunk/cautions, "Why this rank"). View-model + pure selection helpers moved to lib/healingFoods.ts (lensPool, pickForYou, groupFoodsByCategory) with 6 tests; same session-guarded /api/food-as-medicine unchanged.
+- 956e268: my-foods healing-foods chip switched to next/link Link (client-nav instead of full reload).
+- R-1 (e59c5cd): /my-foods rebuilt in the compact-row language of the library - divide-y card list, at-a-glance chips (kcal/GI/logged), classical-property badges inline, full macros behind a native details disclosure; presentation only, same API + edit/delete semantics.
+- Suite: 31/348 -> 32/354 green; next build clean (only the pre-existing /log img warning). Zero migration; no package.json changes; engine/food-db untouched.
+- Gap noticed post-ship (fixed in S-1): /my-foods never rendered AppShell - sidebar/mobile nav/disclaimer footer were missing since the page was created in C4.
+
+## 2026-10-26 - S-1 hotfix + P5-a/P5-b + ancient-practice tradition lens
+
+User-reported bugs driving S-1: /my-foods showed no left tabs; page loads after login felt slow (was fast before).
+
+- S-1 (hotfix): /my-foods wrapped in AppShell (missing since C4, not an R-1 regression); new appshell-wiring.test.ts pins every authed page to AppShell via page-or-ancestor-layout scan (admin covered by its layout); loadDashboardData runs user+relations and mergedFoodIndex in Promise.all with lean per-relation selects; dashboard page fetches pending check-ins in parallel; apps/web/vercel.json pins functions to bom1 (Mumbai) next to Turso ap-south - the region move noted on 10-22 but never applied. Prod diagnosis: functions were hkg1, dashboard 3.8s cold / 2.7s warm.
+- P5-a: public /install page - beforeinstallprompt-backed Install button on Android, step-by-step iOS Share > Add to Home Screen guide, desktop address-bar pointer, standalone "you're in" state; QR is a pre-generated static SVG (public/install-qr.svg, decode-verified outside the repo with qrcode+jsqr so zero runtime deps), shown on desktop only. Discovery links from /login, Settings, and the mobile More sheet.
+- P5-b: AppShell's 17-item horizontal mobile strip replaced by a fixed bottom tab bar (Home/Log meal/Foods/Insights + More sheet; 56px cells, aria-current, safe-area padding; desktop sidebar unchanged). sw.js v3 precaches the public shell and falls back unknown navigations to a static /offline page; /api stays never-cached. Offline meal logging: a network-failed tray save queues exact /api/meals POST bodies in IndexedDB (lib/offlineQueue.ts) and replays them on online/visibility/Background Sync/next launch; server rejections never queue, items drop after 5 attempts with a surfaced warning; OfflineQueueStatus badge in AppShell; RecentMeals refreshes via the existing meals-updated event. offline-wiring.test.ts pins the invariants.
+- Ancient practices (user ask: "what do the old practices say?"): new optional TraditionLensData on the engine's HealingFood (validator rules + ranking-neutrality tests - content-only lens); 14 of 16 dataset entries carry classical texts (hedged "as commonly taught"), traditional forms (yavagu, sattu, mudde, chyawanprash, triphala, bharwa karela, shatapavali) and 1-4 concrete practices each; vinegar + plate-order stay tradition-free by policy (honest coverage beats padding). Rendered as an amber "Ancient practice" section on every food profile, always visible. /healing-foods gains a server-rendered "Ancient practices" card: 8 classical eating practices (midday main meal, three-quarters rule, six tastes, warm fresh food, eating settled, ginger-lime-salt, shatapavali, ritucharya) each labeled classical text / classical kitchen / household tradition.
+- Suite: 32/354 -> 37/381 green (+5 files, +27 tests). next build clean (47 routes; only the pre-existing /log img warning). Zero migration (0005 still reserved); no package.json changes.
+- Delivery: gated artifact protocol as usual (patch series + bundle fallback + SHA256-verified PowerShell, y/n gates, per-block commits).
+
+Post-deploy smoke checklist:
+1. /my-foods signed in: sidebar on desktop, bottom tab bar on mobile, disclaimer footer present; wiring test ran green in CI-equivalent (vitest).
+2. After Vercel deploy: check response headers x-vercel-id contains bom1 (Settings > Functions region if the plan rejects vercel.json - delete the file and set Mumbai there).
+3. Dashboard load time after login should drop noticeably (region + parallel queries); compare against the 3.8s/2.7s baseline.
+4. /install on Android Chrome shows the Install button; on iOS shows the Share steps; desktop shows the QR (scan it with a phone to confirm it opens /install).
+5. Phone: bottom tab bar navigates; More opens the sheet; all pages reachable; 44px+ targets.
+6. Log a meal with airplane mode on: amber "saved on this phone" banner; re-enable network: sync badge appears, meals sync, RecentMeals shows them.
+7. /healing-foods: Ancient practices card below the library; open Barley / Fenugreek / Amla / Early dinner profiles: amber "Ancient practice" section with classical sources and practices.
+8. Signed-out GET /api/food-as-medicine still 401; /install and /offline open signed-out.
