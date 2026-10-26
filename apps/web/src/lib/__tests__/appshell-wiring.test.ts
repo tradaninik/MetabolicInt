@@ -19,6 +19,7 @@ const PUBLIC_PAGES = new Set([
   'page.tsx', // marketing/landing at /
   join('login', 'page.tsx'),
   join('onboarding', 'page.tsx'),
+  join('install', 'page.tsx'), // P5-a - reachable pre-login so the app can be installed first
 ]);
 
 function listPages(dir: string): string[] {

@@ -120,6 +120,14 @@ function LoginForm() {
         </Link>
       </p>
 
+      {/* P5-a: install-first path - many users set the app up from their phone. */}
+      <p className="mt-3 text-center text-sm text-neutral-600 dark:text-neutral-400">
+        On your phone?{' '}
+        <Link href="/install" className="font-medium text-brand-600 hover:underline">
+          Install the app
+        </Link>
+      </p>
+
       <p className="mt-8 text-center text-xs leading-relaxed text-neutral-500 dark:text-neutral-400">
         {MEDICAL_DISCLAIMER_SHORT}
       </p>

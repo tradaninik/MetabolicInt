@@ -123,6 +123,20 @@ export default function SettingsPage() {
           </label>
         </div>
 
+        {/* P5-a: phone install - one tap from the desktop site to the QR page. */}
+        <div className="mt-4 rounded-2xl border border-neutral-200 p-5 dark:border-neutral-800">
+          <h2 className="text-lg font-semibold">Phone app</h2>
+          <p className="mt-1 text-sm text-neutral-500">
+            Install Metabolic on your phone - it opens full screen with its own icon, like any app.
+          </p>
+          <a
+            href="/install"
+            className="mt-3 inline-block rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+          >
+            Install on this device
+          </a>
+        </div>
+
         <div className="mt-4 rounded-2xl border border-neutral-200 p-5 dark:border-neutral-800">
           <h2 className="text-lg font-semibold">Target ranges (mg/dL)</h2>
           <p className="mt-1 text-xs text-neutral-500">
