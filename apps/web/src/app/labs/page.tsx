@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from 'react';
 import AppShell from '@/components/AppShell';
 import PanelBrowser, { type PanelView, type TrendView } from '@/components/labs/PanelBrowser';
 import ImportReport from '@/components/labs/ImportReport';
+import ComparePanels from '@/components/labs/ComparePanels';
 import { istNow, a1cToEagMgDl } from '@/lib/clinical-db';
 
 interface LabRow {
@@ -34,7 +35,7 @@ export default function LabsPage() {
   const [panels, setPanels] = useState<PanelView[]>([]);
   const [trends, setTrends] = useState<TrendView[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const [tab, setTab] = useState<'panels' | 'import'>('panels');
+  const [tab, setTab] = useState<'panels' | 'import' | 'compare'>('panels');
 
   const load = useCallback(async () => {
     try {
@@ -183,7 +184,7 @@ export default function LabsPage() {
           </details>
         )}
 
-        {/* ---------- A–E panels: entry, history, trends + import ---------- */}
+        {/* ---------- A–E panels: entry, history, trends + import + compare ---------- */}
         <div className="mt-8 flex gap-2" role="tablist" aria-label="Labs sections">
           <button role="tab" aria-selected={tab === 'panels'} onClick={() => setTab('panels')} className={segBtn(tab === 'panels')}>
             Panels &amp; trends
@@ -191,10 +192,14 @@ export default function LabsPage() {
           <button role="tab" aria-selected={tab === 'import'} onClick={() => setTab('import')} className={segBtn(tab === 'import')}>
             ⤵ Import report
           </button>
+          <button role="tab" aria-selected={tab === 'compare'} onClick={() => setTab('compare')} className={segBtn(tab === 'compare')}>
+            ⇄ Compare
+          </button>
         </div>
 
         {tab === 'panels' && <PanelBrowser panels={panels} trends={trends} onSaved={load} />}
         {tab === 'import' && <ImportReport onSaved={load} />}
+        {tab === 'compare' && <ComparePanels panels={panels} />}
       </div>
     </AppShell>
   );

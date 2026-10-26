@@ -28,3 +28,4 @@ export * from './glucoseGuard';
 export * from './recipe';
 export * from './labs';
 export * from './labReportParser';
+export * from './labCompare';
