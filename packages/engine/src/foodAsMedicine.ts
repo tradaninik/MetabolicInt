@@ -66,6 +66,32 @@ export interface StoriesLensData {
   summary: string;
 }
 
+/** Ancient practice lens (P5 tradition layer). Educational summary of what
+ *  the classical tradition actually says about an entry: which texts mention
+ *  it, how it was traditionally prepared and used, and the honest note that
+ *  classical practice is tradition, not clinical evidence. Content-only:
+ *  this lens never affects ranking; it renders as its own profile section. */
+export interface TraditionPractice {
+  /** Short practice name, e.g. "Soaked seeds at sunrise". */
+  name: string;
+  /** What the practice is, phrased educationally (2+ sentences). */
+  detail: string;
+}
+
+export interface TraditionLensData {
+  /** One-line traditional framing of the entry. */
+  headline: string;
+  /** Classical sources that describe the entry, phrased educationally
+   *  (e.g. "Charaka Samhita, Sutrasthana - as commonly taught"). */
+  classicalTexts?: string[];
+  /** The traditional preparation form(s) (e.g. "yavagu - barley gruel"). */
+  preparation?: string;
+  /** Concrete traditional practices around this entry (1-4 items). */
+  practices: TraditionPractice[];
+  /** Interpretive honesty note: tradition vs evidence framing. */
+  note?: string;
+}
+
 export interface HealingFood {
   slug: string;
   name: string;
@@ -77,6 +103,8 @@ export interface HealingFood {
   ayurveda?: AyurvedaLensData;
   science?: ScienceLensData;
   stories?: StoriesLensData;
+  /** Ancient-practice lens: classical texts, preparations and practices (P5). */
+  tradition?: TraditionLensData;
 }
 
 export const LENS_META: Record<LensId, { id: LensId; label: string; blurb: string }> = {
@@ -240,6 +268,27 @@ export function validateHealingFood(food: HealingFood): string[] {
     }
     if (!isStringArray(st.patterns)) p.push('stories.patterns must be non-empty strings');
     if (!nonEmpty(st.summary, 10)) p.push('stories.summary is required');
+  }
+
+  // P5 tradition lens: optional; when present, editorial rules mirror the
+  // dataset policy - descriptive classical framing, real practices, no
+  // treatment claims (the dataset integrity test separately scans strings
+  // for forbidden medical language, and tradition strings are included).
+  const tr = food.tradition;
+  if (tr) {
+    if (!nonEmpty(tr.headline, 8)) p.push('tradition.headline is required (min 8 chars)');
+    if (tr.classicalTexts !== undefined && !isStringArray(tr.classicalTexts)) {
+      p.push('tradition.classicalTexts must be non-empty strings');
+    }
+    if (tr.preparation !== undefined && !nonEmpty(tr.preparation, 8)) {
+      p.push('tradition.preparation must be non-empty');
+    }
+    if (!Array.isArray(tr.practices) || tr.practices.length === 0 || tr.practices.length > 4) {
+      p.push('tradition.practices must carry 1-4 practices');
+    } else if (!tr.practices.every((pr) => nonEmpty(pr.name, 4) && nonEmpty(pr.detail, 20))) {
+      p.push('tradition.practices must carry a name and a descriptive detail each');
+    }
+    if (tr.note !== undefined && !nonEmpty(tr.note, 8)) p.push('tradition.note must be non-empty');
   }
 
   return p;

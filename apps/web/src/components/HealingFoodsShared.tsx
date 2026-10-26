@@ -5,7 +5,7 @@
 // explorer and the /healing-foods/[slug] profile never drift apart.
 
 import type { ReactNode } from 'react';
-import type { AyurvedaLens, EvidenceGrade, FoodAsMedicineData, LensChoice, ScienceLens, StoriesLens } from '@/lib/healingFoods';
+import type { AyurvedaLens, EvidenceGrade, FoodAsMedicineData, LensChoice, ScienceLens, StoriesLens, TraditionLens } from '@/lib/healingFoods';
 
 export const LENS_CHOICES: { id: LensChoice; label: string }[] = [
   { id: 'all', label: 'All lenses' },
@@ -108,6 +108,60 @@ export function LensSection({
       <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-400">{label}</h3>
       {meta.lenses[id] && <p className="sr-only">{meta.lenses[id].blurb}</p>}
       <div className="mt-2">{children}</div>
+    </section>
+  );
+}
+
+/** P5 - Ancient practice section. Deliberately NOT a lens: it renders as its
+ *  own amber-toned panel after the three lens sections, always visible when
+ *  an entry carries tradition content (it is not part of the lens toggle). */
+export function TraditionSection({ lens }: { lens: TraditionLens }) {
+  return (
+    <section
+      aria-label="Ancient practice"
+      className="rounded-xl border border-amber-200 bg-amber-50/50 p-3 dark:border-amber-900/60 dark:bg-amber-950/20"
+    >
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+        Ancient practice · what the tradition says
+      </h3>
+      <p className="mt-2 text-sm font-medium text-amber-900 dark:text-amber-200">{lens.headline}</p>
+
+      {lens.classicalTexts && lens.classicalTexts.length > 0 && (
+        <div className="mt-2">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-600/80 dark:text-amber-500/80">
+            Classical sources
+          </p>
+          <ul className="mt-1 space-y-0.5">
+            {lens.classicalTexts.map((t) => (
+              <li key={t} className="text-xs text-amber-800/90 dark:text-amber-300/80">
+                · {t}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {lens.preparation && (
+        <p className="mt-2 text-sm text-amber-900 dark:text-amber-200">
+          <span className="font-semibold">Traditional form: </span>
+          {lens.preparation}
+        </p>
+      )}
+
+      <div className="mt-3 space-y-2">
+        {lens.practices.map((pr) => (
+          <div key={pr.name} className="rounded-lg border border-amber-200/70 bg-white/60 p-2.5 dark:border-amber-900/50 dark:bg-neutral-950/40">
+            <p className="text-sm font-medium text-amber-900 dark:text-amber-200">{pr.name}</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-amber-800/90 dark:text-amber-300/80">{pr.detail}</p>
+          </div>
+        ))}
+      </div>
+
+      {lens.note && (
+        <p className="mt-2 border-t border-amber-200/60 pt-2 text-[11px] italic leading-relaxed text-amber-700/90 dark:border-amber-900/40 dark:text-amber-400/80">
+          {lens.note}
+        </p>
+      )}
     </section>
   );
 }

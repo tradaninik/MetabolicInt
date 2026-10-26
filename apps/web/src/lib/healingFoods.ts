@@ -34,6 +34,15 @@ export interface StoriesLens {
   summary: string;
 }
 
+/** P5 tradition lens - mirrors the engine's TraditionLensData shape. */
+export interface TraditionLens {
+  headline: string;
+  classicalTexts?: string[];
+  preparation?: string;
+  practices: { name: string; detail: string }[];
+  note?: string;
+}
+
 export interface HealingFoodView {
   slug: string;
   name: string;
@@ -44,6 +53,7 @@ export interface HealingFoodView {
   ayurveda?: AyurvedaLens;
   science?: ScienceLens;
   stories?: StoriesLens;
+  tradition?: TraditionLens;
 }
 
 export interface RankedFood {

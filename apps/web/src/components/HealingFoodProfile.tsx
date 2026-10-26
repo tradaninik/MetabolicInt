@@ -17,6 +17,7 @@ import {
   LensSection,
   ScienceLensContent,
   StoriesLensContent,
+  TraditionSection,
 } from '@/components/HealingFoodsShared';
 import type { FoodAsMedicineData, LensChoice } from '@/lib/healingFoods';
 
@@ -169,6 +170,11 @@ export default function HealingFoodProfile({ slug }: { slug: string }) {
             <StoriesLensContent lens={f.stories} meta={data} />
           </LensSection>
         ) : view === 'stories' ? <MissingLens label="Lived experience" /> : null}
+
+        {/* P5 - Ancient practice: classical texts, preparations and practices.
+            Distinct from the three lenses on purpose - it stays visible under
+            any lens view, because the user asked for tradition, not a filter. */}
+        {f.tradition && <TraditionSection lens={f.tradition} />}
       </div>
 
       {/* Ranking transparency */}

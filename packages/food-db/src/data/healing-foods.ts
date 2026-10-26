@@ -54,6 +54,17 @@ export const healingFoods: HealingFood[] = [
       patterns: ['Swapping the evening roti for a jau roti', 'Sipping barley water through the day in summer', 'Mixing barley flour into everyday atta'],
       summary: 'Jau roti at dinner is the swap people describe most often - a little chewier, and usually reported as gentler on post-meal readings.',
     },
+    tradition: {
+      headline: 'The classical grain of prameha - kept as food, gruel and water.',
+      classicalTexts: ['Charaka Samhita - pathya (diet) chapters, as commonly taught', 'Bhavaprakasha Nighantu - grain properties, as commonly taught'],
+      preparation: 'Yavagu - thin barley gruel, the classical light-meal form; roasted barley flour (sattu) stirred into water.',
+      practices: [
+        { name: 'Yavagu - the light barley gruel', detail: 'The classical kitchen answer to "what should someone heavy and sluggish eat" was a thin gruel of barley - easy to digest, light and drying. It was everyday food framing, not a prescription in the modern sense.' },
+        { name: 'Barley water through summer', detail: 'Classical seasonal advice pairs the light, cooling grain with the hot season - barley water sipped through the day is the household form of that idea.' },
+        { name: 'Sattu - roasted barley flour', detail: 'Roasting the grain and mixing the flour into water or buttermilk is a traditional carry-along form that survives in Bihar as sattu - a quick, cooling, filling drink.' },
+      ],
+      note: 'The classical texts predate modern diabetes; prameha maps loosely onto a family of urinary-metabolic conditions, and the advice stays framed as food and routine, nothing more.',
+    },
   },
   {
     slug: 'ragi-finger-millet',
@@ -85,6 +96,17 @@ export const healingFoods: HealingFood[] = [
       patterns: ['Half the plate as ragi or mixed millet instead of white rice', 'Ragi mudde with sambar as the lunch base', 'Millets rotating through the week instead of daily rice'],
       summary: 'Millet-first plates are among the most consistently reported changes in Indian diabetes communities - usually described as the easiest swap that stuck.',
     },
+    tradition: {
+      headline: 'Classically grouped with the light millets - food of the fields, eaten soft and fresh.',
+      classicalTexts: ['Classical grain classifications (kudhanya - the light minor grains), as commonly taught in Bhavaprakasha Nighantu'],
+      preparation: 'Soft, fresh-cooked forms - ragi mudde (dough balls) with sambar, or porridge; freshly made rather than dry or reheated.',
+      practices: [
+        { name: 'The strengthening grain of working plates', detail: 'Millets were the everyday grain of much of the Deccan - hardy, cheap and strengthening. The traditional portion was generous at midday, smaller at night.' },
+        { name: 'Mudde, not dry flour', detail: 'The traditional form cooks coarsely ground ragi into soft balls eaten hot with liquid dal or sambar. Fine, dry preparations were considered harder on digestion - an old instinct that matches what modern GI testing later found.' },
+        { name: 'Rotation with the seasons', detail: 'Households rotated millets with rice by season and budget - a built-in variety the modern single-grain plate lost.' },
+      ],
+      note: 'Classical texts describe millets as light and kapha-reducing but also drying and heating - the tradition itself says portions and preparation matter, which is why processing dominates its modern GI range.',
+    },
   },
   {
     slug: 'fenugreek-seeds-methi',
@@ -113,6 +135,17 @@ export const healingFoods: HealingFood[] = [
       prevalence: 'widely',
       patterns: ['A teaspoon of methi seeds soaked overnight, swallowed in the morning', 'Methi powder stirred into buttermilk or dahi', 'Methi leaves cooked as a weekly sabzi'],
       summary: 'The soaked-seed morning practice is the most-mentioned household habit in community threads - alongside honest reports that it helps only a little unless the plate changes too.',
+    },
+    tradition: {
+      headline: 'A bitter seed the tradition used to cut through heaviness - soaked, powdered or woven into winter food.',
+      classicalTexts: ['Bhavaprakasha Nighantu - methika properties, as commonly taught', 'Classical formularies listing methika among the bitter seeds, as commonly taught'],
+      preparation: 'A teaspoon of seeds soaked overnight in water and taken in the morning; seed powder mixed into flour; methi laddu in winter.',
+      practices: [
+        { name: 'The overnight soak', detail: 'Soaking softens the hard seed and takes the edge off its bitterness - the classic household form is the soaked seeds or their water, first thing in the morning.' },
+        { name: 'Winter methi laddu', detail: 'North Indian winters bring methi laddu - the bitter seed cooked with gingelly base and jaggery into a warming seasonal sweet. It is a seasonal food, portioned like a tonic, not an everyday snack.' },
+        { name: 'Leaves as a regular green', detail: 'Methi greens cooked as a vegetable through their season were the gentler everyday use - the seed was for occasional or seasonal use.' },
+      ],
+      note: 'The tradition favored small regular amounts over large doses - a sensible instinct, since the seed is potent enough that modern caution flags it alongside glucose-lowering medication.',
     },
   },
   {
@@ -143,6 +176,17 @@ export const healingFoods: HealingFood[] = [
       patterns: ['Dal-and-vegetable plates where rice is the smaller half', 'Chilla (besan or moong pancakes) as a breakfast swap for poha and upma', 'Sprouted chana as an evening snack'],
       summary: 'Pulse-forward plates and besan chilla breakfasts come up constantly as satisfying swaps people actually keep.',
     },
+    tradition: {
+      headline: 'Mudga - green gram - is the classical best dal, and the tradition judges every pulse by how it sits after eating.',
+      classicalTexts: ['Charaka Samhita - grain and pulse properties, as commonly taught', 'Bhavaprakasha Nighantu - mudga and the other pulses, as commonly taught'],
+      preparation: 'Well-soaked, well-cooked, soupy dals; the classic pairing of dal with rice; sprouted green gram in the warm seasons.',
+      practices: [
+        { name: 'Mudga first', detail: 'Among pulses the classical texts single out green gram (mudga) as the lightest and gentlest - the default dal for the delicate and the convalescing. The folk memory survives in how often moong anchors the everyday plate.' },
+        { name: 'Soak, cook, spice', detail: 'Traditional dal-making is itself a digestibility protocol - soak the pulse, cook it soft, finish with a tadka of ginger, hing and turmeric. Each step carries a stated reason in the classical kitchen.' },
+        { name: 'Dal-chawal - the complete pair', detail: 'Rice with dal and a spoon of ghee is the classical complete-meal template - grain and pulse balancing each other, a pairing modern nutrition reads as complementary protein.' },
+      ],
+      note: 'The tradition also flags undercooked or heavy pulses as hard on digestion - kulattha (horse gram) is praised for kapha-heavy conditions yet called rough. Cooked well, portions ordinary.',
+    },
   },
   {
     slug: 'turmeric-haldi',
@@ -169,6 +213,17 @@ export const healingFoods: HealingFood[] = [
       prevalence: 'commonly',
       patterns: ['Haldi doodh (turmeric milk) at night', 'An extra pinch of haldi in daily tadkas', 'Turmeric and black pepper together in cooking'],
       summary: 'People rarely credit turmeric alone for glucose changes - it is part of the everyday pattern rather than a targeted habit.',
+    },
+    tradition: {
+      headline: 'Haridra - the golden spice - runs through classical cooking, worship and household first-aid.',
+      classicalTexts: ['Bhavaprakasha Nighantu - haridra, as commonly taught', 'Classical external formulations using haridra, as commonly taught'],
+      preparation: 'Fresh or dried root into the tadka; haldi-doodh (turmeric milk) as the household evening classic; paste for external use.',
+      practices: [
+        { name: 'The daily tadka', detail: 'A pinch in hot ghee at the start of a dish is the traditional dose - small, daily, in food. The spice was a companion to the meal, never the meal itself.' },
+        { name: 'Haldi-doodh at night', detail: 'Warm milk with a pinch of turmeric - the original golden milk - is the traditional wind-down drink of northern households, especially in winter or when run down.' },
+        { name: 'Kitchen, shrine, first-aid', detail: 'The same golden root colors wedding vessels, marks the doorstep and strengthens the skin in classical external formulas - one spice spanning three rooms of the house.' },
+      ],
+      note: 'Classical use stays culinary and external; the modern high-dose capsule is a different thing entirely, and the tradition never framed the kitchen pinch as a dose of anything.',
     },
   },
   {
@@ -198,6 +253,17 @@ export const healingFoods: HealingFood[] = [
       patterns: ['A cinnamon stick in morning tea or warm water', 'A pinch of cinnamon on fruit instead of sugar', 'Cinnamon and methi water combinations'],
       summary: 'Morning cinnamon tea is a common gentle habit; most honest reports pair it with plate changes rather than crediting the spice alone.',
     },
+    tradition: {
+      headline: 'Twak - the warming bark - used in pinches to kindle slow digestion.',
+      classicalTexts: ['Classical spice chapters (Bhavaprakasha Nighantu - twak), as commonly taught'],
+      preparation: 'A small piece of bark in the rice pot or milk dishes; powdered with other warming spices into winter mixes.',
+      practices: [
+        { name: 'Pinch, not spoon', detail: 'Traditional use measures cinnamon in pinches - one bark in the rice pot, a dusting on warm milk. The kitchen kept the dose tiny even while praising its warmth.' },
+        { name: 'Cold-season spice', detail: 'Cinnamon belongs to the warming spice family the classical kitchen leans on in winter - with ginger, pepper and clove - to keep the body comfortable through the cold months.' },
+        { name: 'Sweets spiced to sit lighter', detail: 'Kheer and payasam carry a bark of cinnamon alongside cardamom - sweet dishes were traditionally spiced so they would sit lighter afterwards.' },
+      ],
+      note: 'The tradition says nothing about glucose - its interest in twak is warmth and taste. The glucose story is modern research, which is why this entry keeps its honest evidence grade.',
+    },
   },
   {
     slug: 'bitter-gourd-karela',
@@ -225,6 +291,17 @@ export const healingFoods: HealingFood[] = [
       prevalence: 'commonly',
       patterns: ['Stuffed or stir-fried karela as a weekly sabzi', 'A small glass of karela juice in the morning (medication caution applies)', 'Karela chips as a snack swap'],
       summary: 'Karela-juice mornings are a well-known household practice; community reports split between helping a little and not keeping it up. As a weekly vegetable it needs no caution at all.',
+    },
+    tradition: {
+      headline: 'Karavellaka - the classical bitter vegetable of prameha - eaten as food, in meal-sized portions.',
+      classicalTexts: ['Materia medica of the Bhavaprakasha line listing karavellaka among bitter vegetables, as commonly taught', 'Regional kitchen traditions of bharwa karela'],
+      preparation: 'Stuffed and slow-cooked (bharwa karela), thin-sliced curry, or sun-dried chips powdered for the off-season.',
+      practices: [
+        { name: 'A course, not a shot', detail: 'The traditional plate frames karela as one course of a meal - stuffed, curried or dried - balanced against the other tastes. Concentrated juice by the glass is a modern intensification the tradition never practiced.' },
+        { name: 'Salted, squeezed, tamed', detail: 'Every regional kitchen has a taming ritual - salt and rest, squeeze the bitterness out, cook with onion or a little jaggery - because the point was to eat it gladly, not grimly.' },
+        { name: 'Its season, then done', detail: 'Karela has its season in the garden; households ate it when it came and stopped when it passed - the opposite of a daily year-round dose.' },
+      ],
+      note: 'The classical prameha framing is about food choice and taste balance; the small modern trials test a vegetable the tradition served in its season, not an extracted concentrate.',
     },
   },
   {
@@ -258,6 +335,16 @@ export const healingFoods: HealingFood[] = [
       patterns: ['Bhindi as an everyday vegetable in rotation', 'Trying okra water after social-media claims - most report no lasting change', 'Okra in sambar and mixed vegetable curries'],
       summary: 'A handful of people report trying okra water; almost all go back to simply eating okra. The vegetable itself stays popular either way.',
     },
+    tradition: {
+      headline: 'A nourishing, unctuous everyday vegetable - and, honestly, not a classical prameha remedy.',
+      classicalTexts: ['Classical vegetable chapters describing okra as nourishing and unctuous, as commonly taught'],
+      preparation: 'Dry-fried or curried fresh, eaten as a vegetable; never reduced to an extract.',
+      practices: [
+        { name: 'The honest gap', detail: 'Unlike barley, methi, jamun or karela, okra carries no classical prameha reputation. The tradition valued it as a soft, nourishing vegetable for ordinary plates - and said so plainly.' },
+        { name: 'Slippery means soothing', detail: 'The traditional read on okra is its slipperiness - taken as a sign of its unctuous, soothing quality, good for the dry and depleted. That is taste-and-texture reasoning, not a glucose claim.' },
+      ],
+      note: 'The okra-water craze is modern internet, not tradition - worth saying out loud, because the tradition itself never asked okra to be more than a good vegetable.',
+    },
   },
   {
     slug: 'moringa-drumstick',
@@ -284,6 +371,17 @@ export const healingFoods: HealingFood[] = [
       prevalence: 'commonly',
       patterns: ['Drumstick pods in weekly sambar', 'A teaspoon of moringa leaf powder in buttermilk or dal', 'Fresh moringa leaves cooked as greens when in season'],
       summary: 'Drumstick sambar is simply household normal; the leaf-powder teaspoon is the newer, targeted habit people describe.',
+    },
+    tradition: {
+      headline: 'Shigru - the sharp, fast-growing backyard tree - pods in the pot, leaves on the plate.',
+      classicalTexts: ['Classical vegetable chapters on shigru, as commonly taught', 'South Indian kitchen tradition of drumstick sambar'],
+      preparation: 'Pods simmered in sambar or dal until spoon-soft; leaves cooked as a seasonal green; leaf powder as the modern concentrated form.',
+      practices: [
+        { name: 'The backyard tree', detail: 'Every part of the tree had a use in the traditional household - pods in the pot, leaves as a green, bark and gum in external care. The name shigru is traditionally glossed as sharp-moving, for how quickly the tree grows.' },
+        { name: 'Sambar is the delivery system', detail: 'The long-simmered sambar that softens the fibrous pod is itself the traditional wisdom - slow cooking, eaten with rice and a spoon of ghee, the pod never swallowed raw.' },
+        { name: 'Leaves as a seasonal green', detail: 'Where the tree grew, the leaves were simply a green vegetable for the season. The teaspoon of dried leaf powder is the modern, targeted habit - not the traditional form.' },
+      ],
+      note: 'The tradition ate the tree; it never concentrated it. The leaf-powder story is modern, and its trial evidence stays honestly mixed.',
     },
   },
   {
@@ -314,6 +412,17 @@ export const healingFoods: HealingFood[] = [
       patterns: ['A bowl of jamuns as the summer fruit instead of mango', 'Dried seed powder in water during the season', 'Jamun vinegar as an occasional drink'],
       summary: 'Summer jamun snacking is fondly reported; the seed-powder habit is the more targeted practice with weaker reports behind it.',
     },
+    tradition: {
+      headline: 'Jambu - the summer fruit the tradition saves its seed from.',
+      classicalTexts: ['Classical fruit chapters listing jambu among prameha fruits, as commonly taught', 'The subcontinent itself is classically named Jambudvipa - the island of the jamun tree'],
+      preparation: 'Fresh fruit in early summer; seeds dried through the season and powdered for the rest of the year.',
+      practices: [
+        { name: 'Season first', detail: 'The traditional relationship with jamun is seasonal - the first ripe fruit of early summer, eaten fresh, then done. Fruits belonged to their season, never a year-round schedule.' },
+        { name: 'The seed continues', detail: 'The classical household habit is saving the seeds, drying them and keeping the powder - the fruit ends, the kernel continues through the year in small pinches. This is the very practice modern small studies later probed.' },
+        { name: 'Astringency read as meaning', detail: 'The tradition read jamun\'s mouth-drying astringency as its signature quality for heavy, damp states - taste-based reasoning, on a fruit that modern tables confirm as genuinely low-GI.' },
+      ],
+      note: 'Jambu sits in the classical prameha food lists alongside barley and karela - the traditional triad people still name today.',
+    },
   },
   {
     slug: 'amla-indian-gooseberry',
@@ -340,6 +449,17 @@ export const healingFoods: HealingFood[] = [
       prevalence: 'commonly',
       patterns: ['One raw amla in season with a pinch of salt', 'Amla juice diluted in the morning', 'Amla murabba - with the sugar caveat attached'],
       summary: 'Raw amla in season is the reported classic; murabba lovers usually add the caveat that the sugar syrup matters.',
+    },
+    tradition: {
+      headline: 'Amalaki - the first among rasayanas, five tastes in one fruit.',
+      classicalTexts: ['Charaka Samhita - rasayana chapters, as commonly taught', 'The chyawanprash tradition of amla cooked with herbs, as commonly taught'],
+      preparation: 'Raw in season; murabba preserved in syrup; chyawanprash - the classical amla-based jam; triphala as the nightly companion.',
+      practices: [
+        { name: 'The rasayana above all', detail: 'If the tradition singles out one fruit, it is amla - called tridoshic (suiting every constitution) and sattvic. The praise is for a whole food eaten in season, as a broad rejuvenative rather than a targeted fix.' },
+        { name: 'Chyawanprash season', detail: 'The famous classical preparation cooks fresh amla with dozens of herbs into a preserve taken by the spoon through winter - a seasonal food-ritual that remains a fixture across Indian households.' },
+        { name: 'Triphala - the daily three', detail: 'Amla is one third of triphala, the classical three-fruit companion taken at night - among the most enduring daily habits in the whole tradition.' },
+      ],
+      note: 'The tradition frames amla as nourishing vitality broadly; the modern antioxidant reading is a different lens on the same respect.',
     },
   },
   {
@@ -368,6 +488,17 @@ export const healingFoods: HealingFood[] = [
       prevalence: 'widely',
       patterns: ['A handful of soaked almonds in the morning', 'A few walnuts with fruit as an evening snack', 'A few nuts eaten before restaurant meals to blunt the spike'],
       summary: 'The soaked-almond morning is near-universal in reported routines; the nuts-before-a-big-meal trick gets repeated often enough to be a community staple.',
+    },
+    tradition: {
+      headline: 'The soaked-almond morning - the tradition\'s idea of steady strength.',
+      classicalTexts: ['Classical rejuvenative chapters praising soaked, peeled almonds, as commonly taught'],
+      preparation: 'A few almonds soaked overnight and peeled at dawn, taken with warm milk; walnuts as a winter nut.',
+      practices: [
+        { name: 'Soak, peel, dawn', detail: 'The classical morning habit is precise: a few almonds soaked overnight, peeled in the morning, taken with warm milk - traditionally given to students and the elderly alike, with peeling said to make the nut lighter and sweeter to digest.' },
+        { name: 'A handful, not a bowl', detail: 'The tradition consistently holds nuts to be heavy beyond small amounts - strengthening but hard on digestion in excess, a caution the modern calorie table quietly agrees with.' },
+        { name: 'Winter strength', detail: 'Nuts belong with ghee, gingelly and jaggery in the traditional winter pantry - stored strength for the cold months, easing off as spring returns.' },
+      ],
+      note: 'The tradition never reasoned about glucose with nuts in hand - its interest was strength and steadiness. The blunting-the-spike story is modern.',
     },
   },
   {
@@ -413,6 +544,16 @@ export const healingFoods: HealingFood[] = [
       patterns: ['A 10-15 minute walk after lunch and dinner, every day', 'The after-dinner family walk', 'Stepping away from the table before dessert decisions'],
       summary: 'The after-meal walk is the habit most often credited in community stories of readings turning around - and the one people find easiest to keep.',
     },
+    tradition: {
+      headline: 'Shatapavali - a hundred steps after the meal, and never a nap on a full stomach.',
+      classicalTexts: ['Shatapavali is a household saying rather than a textual injunction - oral tradition across Maharashtra and beyond', 'Classical daily-routine (dinacharya) advice against sleeping right after eating, as commonly taught'],
+      preparation: 'A short, gentle walk after each main meal - never brisk, never long.',
+      practices: [
+        { name: 'A hundred steps, no more', detail: 'The household rule is a calm stroll once the plate is cleared - enough to stay upright and gently moving while digestion works. Brisk effort on a full stomach was explicitly discouraged.' },
+        { name: 'No sleep on a full stomach', detail: 'Classical dinacharya warns against lying down right after eating - the blunt traditional framing is that sleep smothers the digestive process while it is still working. An upright body was the default.' },
+      ],
+      note: 'Honesty first: shatapavali is household wisdom, not a classical prescription - yet the modern trial evidence for a short post-meal walk is among the strongest in this whole library.',
+    },
   },
   {
     slug: 'plate-order-veg-first',
@@ -456,6 +597,17 @@ export const healingFoods: HealingFood[] = [
       prevalence: 'widely',
       patterns: ['Kitchen closes by 7:30-8 pm', 'Dinner as the lightest meal of the day', 'A short after-dinner walk, then the kitchen is closed'],
       summary: 'An early dinner is one of the most repeated rhythms in community routines - people describe better morning numbers and better sleep together.',
+    },
+    tradition: {
+      headline: 'Dinacharya - the big meal at midday, the light one early, and a gap before sleep.',
+      classicalTexts: ['Charaka Samhita and Ashtanga Hridaya - dinacharya (daily routine) chapters, as commonly taught'],
+      preparation: 'The main meal when the sun is highest; supper light and early; a walked gap between eating and sleeping.',
+      practices: [
+        { name: 'Agni follows the sun', detail: 'The classical image is of a digestive fire that peaks at midday and fades with the sun. The traditional rhythm puts the largest meal at midday, when the body is thought to digest best - and the evening plate deliberately lighter.' },
+        { name: 'Light and early supper', detail: 'The evening rule is light, simple, early - then a gap. The tradition explicitly frames late heavy eating as leaving the digestive fire smoldering through the night.' },
+        { name: 'Walk, then sleep', detail: 'The evening routine pairs the early supper with a short walk and a gap before bed - one rhythm rather than separate rules.' },
+      ],
+      note: 'The traditional supper time by this rhythm sits near sunset - far earlier than the modern urban plate. The classical reasoning is digestive; the modern evidence for earlier, lighter dinners is what gives it fresh relevance.',
     },
   },
 ];
