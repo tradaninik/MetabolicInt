@@ -86,6 +86,7 @@ model User {
   settings         UserSettings?
   labs             Lab[]
   recipes          Recipe[]
+  labPanels        LabPanel[]
   meds      Medication[]
   dayTags          DayContextTag[]
   insights          InsightCard[]
@@ -308,6 +309,10 @@ model Lab {
   a1cPercent  Float
   performedAt String   // YYYY-MM-DD
   labName     String?
+  /// P6-d: set when this row was mirrored from a LabPanel save (dual-write
+  /// keeps the /api/labs HbA1c trend a single source). Plain string - no FK,
+  /// so the wave's migration stays purely additive on this legacy table.
+  panelId     String?
   createdAt   DateTime @default(now())
 
   @@index([userId, testType, performedAt])
@@ -330,6 +335,45 @@ model Recipe {
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+}
+
+/// P6-d: a lab report as one dated panel holding many results. performedAt is
+/// "YYYY-MM-DD" (IST convention). LabResult carries denormalized userId +
+/// performedAt so per-test trends are single-table queries.
+model LabPanel {
+  id          String   @id @default(cuid())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  name        String?
+  labName     String?
+  performedAt String   // YYYY-MM-DD
+  sourceNote  String?
+  createdAt   DateTime @default(now())
+
+  results    LabResult[]
+
+  @@index([userId, performedAt])
+}
+
+/// P6-d: one test within a panel. refLow/refHigh store the lab-printed range
+/// (display only - the lab's own numbers always win); flag mirrors what the
+/// lab printed (L/H) when captured.
+model LabResult {
+  id          String    @id @default(cuid())
+  panel       LabPanel  @relation(fields: [panelId], references: [id], onDelete: Cascade)
+  panelId     String
+  userId      String    // denormalized for owner-scoped queries
+  testKey     String    // engine catalog key (labs.ts)
+  value       Float
+  unit        String
+  refLow      Float?
+  refHigh     Float?
+  flag        String?
+  performedAt String    // denormalized from the panel for per-test trends
+  createdAt   DateTime  @default(now())
+
+  @@unique([panelId, testKey])
+  @@index([userId, testKey, performedAt])
 }
 
 /// Phase 2c: medications — adherence display only.

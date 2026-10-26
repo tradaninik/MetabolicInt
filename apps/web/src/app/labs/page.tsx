@@ -1,7 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+// P6-d — /labs, rebuilt around the A–E catalog.
+//
+// HbA1c stays the first citizen: the legacy /api/labs trend (incl. eAG)
+// renders exactly as before - new panel saves dual-write into it. Below it,
+// the PanelBrowser hosts the grouped A–E entry form, panel history and
+// per-test trends. Import / Compare / Documents sections land with P6-c/e/f.
+import { useCallback, useEffect, useState } from 'react';
 import AppShell from '@/components/AppShell';
+import PanelBrowser, { type PanelView, type TrendView } from '@/components/labs/PanelBrowser';
 import { istNow, a1cToEagMgDl } from '@/lib/clinical-db';
 
 interface LabRow {
@@ -23,62 +30,35 @@ interface TrendPoint {
 export default function LabsPage() {
   const [labs, setLabs] = useState<LabRow[]>([]);
   const [trend, setTrend] = useState<TrendPoint[]>([]);
+  const [panels, setPanels] = useState<PanelView[]>([]);
+  const [trends, setTrends] = useState<TrendView[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const [value, setValue] = useState('');
-  const [unit, setUnit] = useState('%');
-  const [date, setDate] = useState('');
-  const [labName, setLabName] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [msg, setMsg] = useState<string | null>(null);
 
-  async function load() {
+  const load = useCallback(async () => {
     try {
-      const r = await fetch('/api/labs');
-      if (r.ok) {
-        const j = await r.json();
-        setLabs(j.labs ?? []);
-        setTrend(j.trend ?? []);
+      const [r1, r2] = await Promise.all([
+        fetch('/api/labs').then((r) => (r.ok ? r.json() : null)),
+        fetch('/api/lab-panels').then((r) => (r.ok ? r.json() : null)),
+      ]);
+      if (r1) {
+        setLabs(r1.labs ?? []);
+        setTrend(r1.trend ?? []);
+      }
+      if (r2) {
+        setPanels(r2.panels ?? []);
+        setTrends(r2.trends ?? []);
       }
     } catch {
       // offline-tolerant: keep whatever we already have
     } finally {
       setLoaded(true);
     }
-  }
-
-  useEffect(() => {
-    setDate(istNow().slice(0, 10));
-    load();
   }, []);
 
-  async function save() {
-    setSaving(true);
-    setError(null);
-    setMsg(null);
-    try {
-      const res = await fetch('/api/labs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          value: Number(value),
-          unit,
-          performedAt: date,
-          ...(labName.trim() ? { labName: labName.trim() } : {}),
-        }),
-      });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j.error ?? 'Could not save this result.');
-      setValue('');
-      setLabName('');
-      setMsg('Saved. Your trend below is updated.');
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not save this result.');
-    } finally {
-      setSaving(false);
-    }
-  }
+  useEffect(() => {
+    istNow(); // import keeps the IST convention pinned on this page
+    load();
+  }, [load]);
 
   const latest = trend.at(-1);
   const prev = trend.length >= 2 ? trend[trend.length - 2] : null;
@@ -87,74 +67,21 @@ export default function LabsPage() {
   return (
     <AppShell>
       <div className="mx-auto max-w-3xl">
-        <h1 className="text-2xl font-semibold tracking-tight">Lab results</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Labs &amp; reports</h1>
         <p className="mt-1 text-sm text-neutral-500">
-          HbA1c from your lab reports, with eAG (estimated average glucose) - so two numbers that
-          sound different tell one story.
+          Every panel from HbA1c to micronutrients, organized A–E the way your reports file - with import,
+          comparison and a document vault.
         </p>
 
         <p className="mt-4 text-xs text-amber-700 dark:text-amber-400">
-          Educational tool, not a diagnosis. Your doctor interprets lab results in the context of
-          your full health picture.
+          Educational tool, not a diagnosis. Values and reference ranges are shown as your lab printed them -
+          your doctor interprets them in the context of your full health picture.
         </p>
 
-        <div className="mt-6 rounded-2xl border border-neutral-200 p-5 dark:border-neutral-800">
-          <h2 className="text-lg font-semibold">Add an HbA1c result</h2>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <label className="text-xs text-neutral-500">
-              Value
-              <input
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-                inputMode="decimal"
-                placeholder={unit === '%' ? 'e.g. 6.8' : 'e.g. 51'}
-                className="mt-1 w-full rounded-lg border border-neutral-300 bg-transparent px-3 py-2 text-sm dark:border-neutral-700"
-              />
-            </label>
-            <label className="text-xs text-neutral-500">
-              Unit on the report
-              <select
-                value={unit}
-                onChange={(e) => setUnit(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-neutral-300 bg-transparent px-3 py-2 text-sm dark:border-neutral-700"
-              >
-                <option value="%">% (most Indian labs)</option>
-                <option value="mmol/mol">mmol/mol (IFCC)</option>
-              </select>
-            </label>
-            <label className="text-xs text-neutral-500">
-              Test date
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-neutral-300 bg-transparent px-3 py-2 text-sm dark:border-neutral-700"
-              />
-            </label>
-            <label className="text-xs text-neutral-500">
-              Lab name (optional)
-              <input
-                value={labName}
-                onChange={(e) => setLabName(e.target.value)}
-                placeholder="e.g. Metropolis, Dr Lal"
-                className="mt-1 w-full rounded-lg border border-neutral-300 bg-transparent px-3 py-2 text-sm dark:border-neutral-700"
-              />
-            </label>
-          </div>
-          {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-          <button
-            onClick={save}
-            disabled={saving || !value || !date}
-            className="mt-4 rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60"
-          >
-            {saving ? 'Saving...' : 'Save result'}
-          </button>
-        </div>
-
+        {/* ---------- HbA1c trend: the first citizen (unchanged view) ---------- */}
         {loaded && trend.length === 0 && (
           <p className="mt-6 text-sm text-neutral-500">
-            No lab results yet - add your latest HbA1c above. A trend appears from the second
-            result onwards.
+            No lab results yet - add your first panel below. A trend appears from the second result onwards.
           </p>
         )}
 
@@ -214,39 +141,41 @@ export default function LabsPage() {
         )}
 
         {labs.length > 0 && (
-          <div className="mt-6 overflow-x-auto rounded-2xl border border-neutral-200 dark:border-neutral-800">
-            <table className="w-full text-sm">
-              <thead className="bg-neutral-50 text-left text-xs text-neutral-500 dark:bg-neutral-900">
-                <tr>
-                  <th className="px-4 py-3">Date</th>
-                  <th className="px-4 py-3">As reported</th>
-                  <th className="px-4 py-3">HbA1c</th>
-                  <th className="px-4 py-3">eAG</th>
-                  <th className="px-4 py-3">Lab</th>
-                </tr>
-              </thead>
-              <tbody>
-                {labs.map((l) => (
-                  <tr key={l.id} className="border-t border-neutral-200 dark:border-neutral-800">
-                    <td className="px-4 py-3 tabular-nums">{l.performedAt}</td>
-                    <td className="px-4 py-3">
-                      {l.value} {l.unit}
-                    </td>
-                    <td className="px-4 py-3 font-medium">{l.a1cPercent}%</td>
-                    <td className="px-4 py-3">{a1cToEagMgDl(l.a1cPercent)} mg/dL</td>
-                    <td className="px-4 py-3 text-neutral-500">{l.labName ?? '-'}</td>
+          <details className="mt-4">
+            <summary className="cursor-pointer text-xs font-medium text-brand-600 dark:text-brand-400">
+              HbA1c history ({labs.length} result{labs.length === 1 ? '' : 's'})
+            </summary>
+            <div className="mt-2 overflow-x-auto rounded-2xl border border-neutral-200 dark:border-neutral-800">
+              <table className="w-full text-sm">
+                <thead className="bg-neutral-50 text-left text-xs text-neutral-500 dark:bg-neutral-900">
+                  <tr>
+                    <th className="px-4 py-3">Date</th>
+                    <th className="px-4 py-3">As reported</th>
+                    <th className="px-4 py-3">HbA1c</th>
+                    <th className="px-4 py-3">eAG</th>
+                    <th className="px-4 py-3">Lab</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {labs.map((l) => (
+                    <tr key={l.id} className="border-t border-neutral-200 dark:border-neutral-800">
+                      <td className="px-4 py-3 tabular-nums">{l.performedAt}</td>
+                      <td className="px-4 py-3">
+                        {l.value} {l.unit}
+                      </td>
+                      <td className="px-4 py-3 font-medium">{l.a1cPercent}%</td>
+                      <td className="px-4 py-3">{a1cToEagMgDl(l.a1cPercent)} mg/dL</td>
+                      <td className="px-4 py-3 text-neutral-500">{l.labName ?? '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </details>
         )}
 
-        {msg && (
-          <p className="mt-4 rounded-lg border border-brand-300 bg-brand-50 p-3 text-sm text-brand-800 dark:border-brand-800 dark:bg-brand-950/40 dark:text-brand-200">
-            {msg}
-          </p>
-        )}
+        {/* ---------- A–E panels: entry, history, trends ---------- */}
+        <PanelBrowser panels={panels} trends={trends} onSaved={load} />
       </div>
     </AppShell>
   );
