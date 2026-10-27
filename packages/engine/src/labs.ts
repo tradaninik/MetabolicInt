@@ -30,6 +30,13 @@ export interface LabTestDef {
   /** display-only default adult range; the lab's printed range wins */
   refLow?: number;
   refHigh?: number;
+  /** P7.1: display-only sex-specific adult defaults (used only when the lab's
+   * own range was not captured and the patient's sex is known). The neutral
+   * refLow/refHigh above remains the fallback for unknown sex. */
+  refSex?: {
+    male?: { low?: number; high?: number };
+    female?: { low?: number; high?: number };
+  };
   direction: LabDirection;
   /** parse aliases incl. Indian lab spellings (case/space/punct-insensitive) */
   aliases: string[];
@@ -143,6 +150,7 @@ export const LAB_TESTS: LabTestDef[] = [
   {
     key: 'creatinine', label: 'Serum creatinine', category: 'A', group: 'Kidney health',
     unit: 'mg/dL', refLow: 0.7, refHigh: 1.3, direction: 'context',
+    refSex: { male: { low: 0.7, high: 1.3 }, female: { low: 0.6, high: 1.1 } },
     aliases: ['creatinine', 's creatinine', 'serum creatinine', 'creat'],
   },
   {
@@ -159,6 +167,33 @@ export const LAB_TESTS: LabTestDef[] = [
     key: 'uacr', label: 'uACR', category: 'A', group: 'Kidney health',
     unit: 'mg/g', refLow: 0, refHigh: 30, direction: 'lower-better',
     aliases: ['uacr', 'acr', 'urine albumin creatinine ratio', 'albumin creatinine ratio', 'urine acr'],
+  },
+  {
+    key: 'bun_creatinine_ratio', label: 'BUN / creatinine ratio', category: 'A', group: 'Kidney health',
+    unit: 'ratio', refLow: 10, refHigh: 20, direction: 'context',
+    aliases: ['bun creatinine ratio', 'bun/creatinine ratio', 'urea creatinine ratio', 'blood urea creatinine ratio', 'bun cr ratio'],
+  },
+  {
+    key: 'uric_acid', label: 'Uric acid', category: 'A', group: 'Metabolic',
+    unit: 'mg/dL', refLow: 2.6, refHigh: 7.2, direction: 'lower-better',
+    refSex: { male: { low: 3.5, high: 7.2 }, female: { low: 2.6, high: 6.0 } },
+    aliases: ['uric acid', 's uric acid', 'serum uric acid', 'urate'],
+  },
+  // P7.1: urine routine chemistry (category A - kidney health adjacent).
+  {
+    key: 'specific_gravity', label: 'Urine specific gravity', category: 'A', group: 'Urine routine',
+    unit: 'ratio', refLow: 1.005, refHigh: 1.03, direction: 'context',
+    aliases: ['specific gravity', 'sp gravity', 'sp gr', 'sg', 'urine specific gravity', 'specific gravity urine'],
+  },
+  {
+    key: 'urine_ph', label: 'Urine pH', category: 'A', group: 'Urine routine',
+    unit: 'pH', refLow: 4.5, refHigh: 8, direction: 'context',
+    aliases: ['urine ph', 'ph urine', 'ph', 'urine reaction ph'],
+  },
+  {
+    key: 'urobilinogen', label: 'Urobilinogen (urine)', category: 'A', group: 'Urine routine',
+    unit: 'mg/dL', refLow: 0, refHigh: 1, direction: 'context',
+    aliases: ['urobilinogen', 'urine urobilinogen', 'urobilinogen urine'],
   },
 
   // ---- B. Cardiovascular & Lipid ----
@@ -212,6 +247,18 @@ export const LAB_TESTS: LabTestDef[] = [
     unit: 'mg/dL', refLow: 5, refHigh: 40, direction: 'context',
     aliases: ['vldl', 'vldl cholesterol', 'very low density lipoprotein'],
   },
+  // P7.1: ratios the labs print alongside the panel (exact-alias matches only -
+  // the parser never turns a component row into a ratio via containment).
+  {
+    key: 'tc_hdl_ratio', label: 'TC / HDL ratio', category: 'B', group: 'Lipid panel',
+    unit: 'ratio', refLow: 0, refHigh: 5, direction: 'lower-better',
+    aliases: ['tc hdl ratio', 'tc/hdl ratio', 'total cholesterol hdl ratio', 'cholesterol hdl ratio', 'tc hdl'],
+  },
+  {
+    key: 'ldl_hdl_ratio', label: 'LDL / HDL ratio', category: 'B', group: 'Lipid panel',
+    unit: 'ratio', refLow: 0, refHigh: 3, direction: 'lower-better',
+    aliases: ['ldl hdl ratio', 'ldl/hdl ratio', 'ldl cholesterol hdl ratio', 'ldl hdl'],
+  },
   // ECG / Echo / Stress test results are documents (category B vault) - no parseable numbers.
   {
     key: 'ecg', label: 'ECG', category: 'B', group: 'ECG / Echo / Stress test', documentOnly: true,
@@ -254,6 +301,28 @@ export const LAB_TESTS: LabTestDef[] = [
     key: 'albumin', label: 'Albumin', category: 'C', group: 'Liver function (LFT)',
     unit: 'g/dL', refLow: 3.5, refHigh: 5.2, direction: 'context',
     aliases: ['albumin', 's albumin', 'serum albumin'],
+  },
+  // P7.1: protein panel + GGT (common Indian LFT extensions).
+  {
+    key: 'protein_total', label: 'Total protein', category: 'C', group: 'Liver function (LFT)',
+    unit: 'g/dL', refLow: 6.4, refHigh: 8.3, direction: 'context',
+    aliases: ['total protein', 'protein total', 's total protein', 'serum total protein', 'total proteins'],
+  },
+  {
+    key: 'globulin', label: 'Globulin', category: 'C', group: 'Liver function (LFT)',
+    unit: 'g/dL', refLow: 2.3, refHigh: 3.5, direction: 'context',
+    aliases: ['globulin', 's globulin', 'serum globulin', 'globulin total'],
+  },
+  {
+    key: 'ag_ratio', label: 'A/G ratio', category: 'C', group: 'Liver function (LFT)',
+    unit: 'ratio', refLow: 1.1, refHigh: 2.2, direction: 'context',
+    aliases: ['a/g ratio', 'albumin globulin ratio', 'ag ratio'],
+  },
+  {
+    key: 'ggt', label: 'GGT (gamma GT)', category: 'C', group: 'Liver function (LFT)',
+    unit: 'U/L', refLow: 8, refHigh: 61, direction: 'lower-better',
+    refSex: { male: { low: 10, high: 71 }, female: { low: 6, high: 42 } },
+    aliases: ['ggt', 'gamma gt', 'gamma glutamyl transferase', 'ggtp', 'gamma glutamyl transpeptidase', 'sggt'],
   },
   {
     key: 'tsh', label: 'TSH', category: 'C', group: 'Thyroid',
@@ -316,6 +385,145 @@ export const LAB_TESTS: LabTestDef[] = [
     key: 'zinc', label: 'Zinc', category: 'D', group: 'Minerals',
     unit: 'ug/dL', refLow: 70, refHigh: 120, direction: 'higher-better',
     aliases: ['zinc', 's zinc', 'serum zinc'],
+  },
+  {
+    key: 'calcium', label: 'Calcium (total)', category: 'D', group: 'Minerals',
+    unit: 'mg/dL', refLow: 8.6, refHigh: 10.3, direction: 'context',
+    aliases: ['calcium', 's calcium', 'serum calcium', 'calcium total', 'total calcium', 'ca'],
+  },
+  {
+    key: 'transferrin_saturation', label: 'Transferrin saturation', category: 'D', group: 'Iron profile',
+    unit: '%', refLow: 20, refHigh: 45, direction: 'context',
+    aliases: ['transferrin saturation', 'tsat', 'iron saturation', 'transferrin saturation percentage'],
+  },
+  // ---- P7.1: Complete blood count (CBC) - category D (iron/nutrition-adjacent). ----
+  {
+    key: 'tlc', label: 'TLC (total leukocyte count)', category: 'D', group: 'Complete blood count (CBC)',
+    unit: '10^3/uL', refLow: 4, refHigh: 11, direction: 'context',
+    aliases: ['tlc', 'total leucocyte count', 'total leukocyte count', 'leucocyte count', 'leukocyte count', 'wbc', 'wbc count', 'total wbc count', 'white blood cell count'],
+  },
+  {
+    key: 'neutrophils_pct', label: 'Neutrophils (%)', category: 'D', group: 'Complete blood count (CBC)',
+    unit: '%', refLow: 40, refHigh: 75, direction: 'context',
+    aliases: ['neutrophils', 'neutrophils %', 'neutrophil percentage', 'polymorphs', 'polymorphonuclear cells'],
+  },
+  {
+    key: 'lymphocytes_pct', label: 'Lymphocytes (%)', category: 'D', group: 'Complete blood count (CBC)',
+    unit: '%', refLow: 20, refHigh: 45, direction: 'context',
+    aliases: ['lymphocytes', 'lymphocytes %', 'lymphocyte percentage', 'lymphs'],
+  },
+  {
+    key: 'monocytes_pct', label: 'Monocytes (%)', category: 'D', group: 'Complete blood count (CBC)',
+    unit: '%', refLow: 2, refHigh: 10, direction: 'context',
+    aliases: ['monocytes', 'monocytes %', 'monocyte percentage'],
+  },
+  {
+    key: 'eosinophils_pct', label: 'Eosinophils (%)', category: 'D', group: 'Complete blood count (CBC)',
+    unit: '%', refLow: 1, refHigh: 6, direction: 'context',
+    aliases: ['eosinophils', 'eosinophils %', 'eosinophil percentage'],
+  },
+  {
+    key: 'basophils_pct', label: 'Basophils (%)', category: 'D', group: 'Complete blood count (CBC)',
+    unit: '%', refLow: 0, refHigh: 1, direction: 'context',
+    aliases: ['basophils', 'basophils %', 'basophil percentage'],
+  },
+  {
+    key: 'neutrophils_abs', label: 'Absolute neutrophil count', category: 'D', group: 'Complete blood count (CBC)',
+    unit: '10^3/uL', refLow: 2, refHigh: 7.5, direction: 'context',
+    aliases: ['absolute neutrophil count', 'anc', 'neutrophils absolute', 'absolute neutrophils', 'neutrophil absolute count'],
+  },
+  {
+    key: 'lymphocytes_abs', label: 'Absolute lymphocyte count', category: 'D', group: 'Complete blood count (CBC)',
+    unit: '10^3/uL', refLow: 1, refHigh: 4, direction: 'context',
+    aliases: ['absolute lymphocyte count', 'alc', 'lymphocytes absolute', 'absolute lymphocytes', 'lymphocyte absolute count'],
+  },
+  {
+    key: 'monocytes_abs', label: 'Absolute monocyte count', category: 'D', group: 'Complete blood count (CBC)',
+    unit: '10^3/uL', refLow: 0.2, refHigh: 1, direction: 'context',
+    aliases: ['absolute monocyte count', 'monocytes absolute', 'absolute monocytes', 'monocyte absolute count'],
+  },
+  {
+    key: 'eosinophils_abs', label: 'Absolute eosinophil count (AEC)', category: 'D', group: 'Complete blood count (CBC)',
+    unit: '10^3/uL', refLow: 0.02, refHigh: 0.5, direction: 'context',
+    aliases: ['absolute eosinophil count', 'aec', 'eosinophils absolute', 'absolute eosinophils', 'eosinophil absolute count'],
+  },
+  {
+    key: 'basophils_abs', label: 'Absolute basophil count', category: 'D', group: 'Complete blood count (CBC)',
+    unit: '10^3/uL', refLow: 0, refHigh: 0.1, direction: 'context',
+    aliases: ['absolute basophil count', 'basophils absolute', 'absolute basophils', 'basophil absolute count'],
+  },
+  {
+    key: 'ig', label: 'Immature granulocytes (IG)', category: 'D', group: 'Complete blood count (CBC)',
+    unit: '%', refLow: 0, refHigh: 0.5, direction: 'context',
+    aliases: ['immature granulocytes', 'immature granulocyte count', 'ig %'],
+  },
+  {
+    key: 'rbc', label: 'RBC count', category: 'D', group: 'Complete blood count (CBC)',
+    unit: '10^6/uL', refLow: 4.2, refHigh: 5.8, direction: 'context',
+    refSex: { male: { low: 4.5, high: 5.9 }, female: { low: 4.1, high: 5.1 } },
+    aliases: ['rbc', 'rbc count', 'red blood cell count', 'red blood cells', 'red cell count', 'erythrocyte count', 'total rbc'],
+  },
+  {
+    key: 'hemoglobin', label: 'Hemoglobin', category: 'D', group: 'Complete blood count (CBC)',
+    unit: 'g/dL', refLow: 12, refHigh: 16, direction: 'context',
+    refSex: { male: { low: 13, high: 17 }, female: { low: 12, high: 15 } },
+    aliases: ['hemoglobin', 'hb', 'haemoglobin', 's hemoglobin', 'serum hemoglobin', 'serum haemoglobin'],
+  },
+  {
+    key: 'hematocrit', label: 'Hematocrit (HCT)', category: 'D', group: 'Complete blood count (CBC)',
+    unit: '%', refLow: 36, refHigh: 48, direction: 'context',
+    refSex: { male: { low: 40, high: 50 }, female: { low: 36, high: 46 } },
+    aliases: ['hematocrit', 'haematocrit', 'hct', 'pcv', 'packed cell volume'],
+  },
+  {
+    key: 'mcv', label: 'MCV', category: 'D', group: 'Complete blood count (CBC)',
+    unit: 'fL', refLow: 83, refHigh: 101, direction: 'context',
+    aliases: ['mcv', 'mean corpuscular volume', 'mean cell volume'],
+  },
+  {
+    key: 'mch', label: 'MCH', category: 'D', group: 'Complete blood count (CBC)',
+    unit: 'pg', refLow: 27, refHigh: 32, direction: 'context',
+    aliases: ['mch', 'mean corpuscular hemoglobin', 'mean corpuscular haemoglobin', 'mean cell hemoglobin'],
+  },
+  {
+    key: 'mchc', label: 'MCHC', category: 'D', group: 'Complete blood count (CBC)',
+    unit: 'g/dL', refLow: 32, refHigh: 36, direction: 'context',
+    aliases: ['mchc', 'mean corpuscular hemoglobin concentration', 'mean corpuscular haemoglobin concentration', 'mean cell hemoglobin concentration'],
+  },
+  {
+    key: 'rdw_sd', label: 'RDW-SD', category: 'D', group: 'Complete blood count (CBC)',
+    unit: 'fL', refLow: 35, refHigh: 56, direction: 'context',
+    aliases: ['rdw sd', 'rdw-sd', 'red cell distribution width sd', 'red cell distribution width sds'],
+  },
+  {
+    key: 'rdw_cv', label: 'RDW-CV', category: 'D', group: 'Complete blood count (CBC)',
+    unit: '%', refLow: 11.5, refHigh: 14.5, direction: 'context',
+    aliases: ['rdw', 'rdw cv', 'rdw-cv', 'red cell distribution width', 'red cell distribution width cv'],
+  },
+  {
+    key: 'pdw', label: 'PDW (platelet distribution width)', category: 'D', group: 'Complete blood count (CBC)',
+    unit: 'fL', refLow: 9, refHigh: 17, direction: 'context',
+    aliases: ['pdw', 'platelet distribution width'],
+  },
+  {
+    key: 'mpv', label: 'MPV', category: 'D', group: 'Complete blood count (CBC)',
+    unit: 'fL', refLow: 7.5, refHigh: 11.5, direction: 'context',
+    aliases: ['mpv', 'mean platelet volume'],
+  },
+  {
+    key: 'platelets', label: 'Platelet count', category: 'D', group: 'Complete blood count (CBC)',
+    unit: '10^3/uL', refLow: 150, refHigh: 410, direction: 'context',
+    aliases: ['platelets', 'platelet count', 'plt', 'thrombocyte count', 'total platelet count'],
+  },
+  {
+    key: 'plcr', label: 'P-LCR (platelet large cell ratio)', category: 'D', group: 'Complete blood count (CBC)',
+    unit: '%', refLow: 13, refHigh: 43, direction: 'context',
+    aliases: ['plcr', 'p-lcr', 'platelet large cell ratio', 'platelet larger cell ratio'],
+  },
+  {
+    key: 'pct', label: 'Plateletcrit (PCT)', category: 'D', group: 'Complete blood count (CBC)',
+    unit: '%', refLow: 0.1, refHigh: 0.5, direction: 'context',
+    aliases: ['pct', 'plateletcrit'],
   },
 
   // ---- E. Complication & Microvascular screenings (document-first) ----
@@ -452,6 +660,23 @@ export function labFlagFor(value: number, refLow?: number, refHigh?: number): 'L
   return null;
 }
 
+/** P7.1: the display-only default range to prefill for this patient - the
+ * sex-specific adult default when the sex is known and the catalog defines
+ * one, else the neutral adult default. The lab's own printed range always
+ * wins over both; this never interprets a value. */
+export function pickDefaultRange(
+  def: LabTestDef,
+  sex?: 'male' | 'female' | 'other' | null,
+): { refLow?: number; refHigh?: number } {
+  const bySex = sex === 'male' || sex === 'female' ? def.refSex?.[sex] : undefined;
+  const low = bySex?.low ?? def.refLow;
+  const high = bySex?.high ?? def.refHigh;
+  return {
+    ...(low != null ? { refLow: low } : {}),
+    ...(high != null ? { refHigh: high } : {}),
+  };
+}
+
 // ---------- Panel payload validation (pure; the API route stays thin) ----------
 
 export interface LabResultInput {
@@ -482,11 +707,17 @@ export interface LabPanelInput {
 /**
  * Validate a panel payload. Plain-language errors; hba1c values entered in
  * mmol/mol are canonicalized to % (callers pass a converter because the
- * engine has no app units coupling).
+ * engine has no app units coupling). P7.1: opts.customKeys are the user's
+ * own created tests ("custom:<id>"), accepted alongside catalog keys; zero
+ * values are allowed (labs print 0.0 for basophils, IG, urobilinogen) -
+ * negatives and junk are not.
  */
 export function validateLabPanelInput(
   input: LabPanelInput,
-  opts: { canonicalA1c?: (value: number, unit: string) => number } = {},
+  opts: {
+    canonicalA1c?: (value: number, unit: string) => number;
+    customKeys?: readonly string[];
+  } = {},
 ): { ok: true; data: { name: string; labName: string; sourceNote: string; performedAt: string; results: ValidatedLabResult[] } } | { ok: false; error: string } {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.performedAt ?? '')) {
     return { ok: false, error: 'Test date must be YYYY-MM-DD.' };
@@ -494,24 +725,27 @@ export function validateLabPanelInput(
   if (!Array.isArray(input.results) || input.results.length === 0) {
     return { ok: false, error: 'A panel needs at least one result.' };
   }
-  if (input.results.length > 60) {
-    return { ok: false, error: 'A panel can hold at most 60 results.' };
+  if (input.results.length > 80) {
+    return { ok: false, error: 'A panel can hold at most 80 results.' };
   }
 
+  const customKeys = new Set(opts.customKeys ?? []);
   const seen = new Set<string>();
   const results: ValidatedLabResult[] = [];
   for (const r of input.results) {
     if (!r || typeof r.testKey !== 'string') continue;
     const def = LAB_TEST_MAP[r.testKey];
-    if (!def) return { ok: false, error: `Unknown test "${r.testKey}".` };
-    if (def.documentOnly) return { ok: false, error: `"${def.label}" is a document category - upload it under Documents.` };
+    const isCustom = !def && customKeys.has(r.testKey);
+    if (!def && !isCustom) return { ok: false, error: `Unknown test "${r.testKey}".` };
+    if (def && def.documentOnly) return { ok: false, error: `"${def.label}" is a document category - upload it under Documents.` };
+    const label = def?.label ?? r.testKey;
     const value = Number(r.value);
-    if (!Number.isFinite(value) || value <= 0) return { ok: false, error: `${def.label}: value must be a positive number.` };
-    if (value > 100000) return { ok: false, error: `${def.label}: value looks implausibly large.` };
-    if (seen.has(r.testKey)) return { ok: false, error: `${def.label} appears twice - keep one value per test.` };
+    if (!Number.isFinite(value) || value < 0) return { ok: false, error: `${label}: value must be zero or a positive number.` };
+    if (value > 100000) return { ok: false, error: `${label}: value looks implausibly large.` };
+    if (seen.has(r.testKey)) return { ok: false, error: `${label} appears twice - keep one value per test.` };
     seen.add(r.testKey);
 
-    let unit = typeof r.unit === 'string' && r.unit.trim() ? r.unit.trim() : def.unit;
+    let unit = typeof r.unit === 'string' && r.unit.trim() ? r.unit.trim() : def ? def.unit : '';
     let finalValue = value;
     // Canonicalize HbA1c to % so per-test trends compare like with like.
     if (r.testKey === 'hba1c' && unit === 'mmol/mol' && opts.canonicalA1c) {

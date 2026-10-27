@@ -15,6 +15,7 @@ import {
   nonHdl,
   ckdEpiEgfr,
   labFlagFor,
+  pickDefaultRange,
   validateLabPanelInput,
   sanitizeFileNameToken,
   reportFileName,
@@ -67,6 +68,15 @@ describe('catalog structure (the A–E master spec)', () => {
       'total_cholesterol', 'hdl', 'ldl', 'triglycerides', 'non_hdl', 'apob', 'vldl',
       'alt', 'ast', 'total_bilirubin', 'alp', 'albumin', 'tsh', 'free_t3', 'free_t4', 'anti_tpo',
       'vitamin_d', 'vitamin_b12', 'ferritin', 'serum_iron', 'tibc', 'magnesium', 'zinc',
+      // P7.1 additions:
+      'bun_creatinine_ratio', 'uric_acid', 'specific_gravity', 'urine_ph', 'urobilinogen',
+      'tc_hdl_ratio', 'ldl_hdl_ratio',
+      'protein_total', 'globulin', 'ag_ratio', 'ggt',
+      'calcium', 'transferrin_saturation',
+      'tlc', 'neutrophils_pct', 'lymphocytes_pct', 'monocytes_pct', 'eosinophils_pct', 'basophils_pct',
+      'neutrophils_abs', 'lymphocytes_abs', 'monocytes_abs', 'eosinophils_abs', 'basophils_abs', 'ig',
+      'rbc', 'hemoglobin', 'hematocrit', 'mcv', 'mch', 'mchc', 'rdw_sd', 'rdw_cv', 'pdw', 'mpv',
+      'platelets', 'plcr', 'pct',
     ]) {
       expect(numeric(k), `missing numeric test ${k}`).toBe(true);
     }
@@ -90,6 +100,33 @@ describe('catalog structure (the A–E master spec)', () => {
     expect(labKeyForAlias('2D Echo')).toBe('echocardiogram');
     expect(labKeyForAlias('TMT')).toBe('stress_test');
     expect(labKeyForAlias('Vit B12')).toBe('vitamin_b12');
+    // P7.1 additions:
+    expect(labKeyForAlias('Hb')).toBe('hemoglobin');
+    expect(labKeyForAlias('PCV')).toBe('hematocrit');
+    expect(labKeyForAlias('Platelet Count')).toBe('platelets');
+    expect(labKeyForAlias('TLC')).toBe('tlc');
+    expect(labKeyForAlias('Gamma GT')).toBe('ggt');
+    expect(labKeyForAlias('GGTP')).toBe('ggt');
+    expect(labKeyForAlias('A/G Ratio')).toBe('ag_ratio');
+    expect(labKeyForAlias('TC/HDL Ratio')).toBe('tc_hdl_ratio');
+    expect(labKeyForAlias('Uric Acid')).toBe('uric_acid');
+    expect(labKeyForAlias('Transferrin Saturation')).toBe('transferrin_saturation');
+    expect(labKeyForAlias('Absolute Neutrophil Count')).toBe('neutrophils_abs');
+  });
+
+  it('P7.1: pickDefaultRange returns the sex-specific adult default when known, neutral otherwise', () => {
+    const hb = LAB_TEST_MAP.hemoglobin;
+    expect(pickDefaultRange(hb, 'male')).toEqual({ refLow: 13, refHigh: 17 });
+    expect(pickDefaultRange(hb, 'female')).toEqual({ refLow: 12, refHigh: 15 });
+    expect(pickDefaultRange(hb, undefined)).toEqual({ refLow: 12, refHigh: 16 });
+    expect(pickDefaultRange(hb, 'other')).toEqual({ refLow: 12, refHigh: 16 });
+    // A test without sex-specific defaults falls back to neutral regardless.
+    expect(pickDefaultRange(LAB_TEST_MAP.tsh, 'female')).toEqual({ refLow: 0.4, refHigh: 4.0 });
+    // Creatinine keeps a sex split; the lab-printed range always wins elsewhere.
+    expect(pickDefaultRange(LAB_TEST_MAP.creatinine, 'female')).toEqual({ refLow: 0.6, refHigh: 1.1 });
+    expect(pickDefaultRange(LAB_TEST_MAP.creatinine, 'male')).toEqual({ refLow: 0.7, refHigh: 1.3 });
+    // hs-CRP has only a high bound - the shape must stay partial.
+    expect(pickDefaultRange(LAB_TEST_MAP.hs_crp, 'male')).toEqual({ refHigh: 3 });
   });
 
   it('containment search ranks the tighter alias first', () => {
@@ -175,14 +212,30 @@ describe('validateLabPanelInput', () => {
     }
   });
 
-  it('rejects bad dates, empty results, unknown keys, duplicates, non-positive values', () => {
+  it('rejects bad dates, empty results, unknown keys, duplicates, negative values', () => {
     expect(validateLabPanelInput({ performedAt: '15/10/2026', results: [{ testKey: 'hba1c', value: 6 }] }).ok).toBe(false);
     expect(validateLabPanelInput({ performedAt: '2026-10-15', results: [] }).ok).toBe(false);
     expect(ok([{ testKey: 'nope', value: 1 }]).ok).toBe(false);
     expect(ok([{ testKey: 'hba1c', value: 6 }, { testKey: 'hba1c', value: 6.1 }]).ok).toBe(false);
-    expect(ok([{ testKey: 'hba1c', value: 0 }]).ok).toBe(false);
+    // P7.1: zero is a real lab value (basophils 0.0 %, urobilinogen 0.0).
+    expect(ok([{ testKey: 'basophils_pct', value: 0 }]).ok).toBe(true);
     expect(ok([{ testKey: 'hba1c', value: -1 }]).ok).toBe(false);
     expect(ok([{ testKey: 'hba1c', value: 1e9 }]).ok).toBe(false);
+  });
+
+  it('accepts the user’s custom test keys when provided, rejects them otherwise', () => {
+    const row = { testKey: 'custom:abc123', value: 2.4, unit: 'mEq/L' };
+    expect(ok([row]).ok).toBe(false); // not a catalog key, no customKeys given
+    const r = validateLabPanelInput(
+      { performedAt: '2026-10-15', results: [row] },
+      { customKeys: ['custom:abc123'] },
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.results[0].testKey).toBe('custom:abc123');
+      expect(r.data.results[0].unit).toBe('mEq/L');
+      expect(r.data.results[0].value).toBe(2.4);
+    }
   });
 
   it('document-only keys are rejected with a pointer to Documents', () => {
