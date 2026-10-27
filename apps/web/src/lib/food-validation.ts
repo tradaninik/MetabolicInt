@@ -13,7 +13,7 @@ import type { FoodCategory, CuisineRegion } from '@mi/engine';
 
 export const CATEGORY_VALUES: ReadonlySet<FoodCategory> = new Set<FoodCategory>([
   'cereal', 'legume', 'vegetable', 'fruit', 'dairy', 'meat', 'fish', 'egg',
-  'nut', 'snack', 'sweet', 'beverage', 'fat',
+  'nut', 'snack', 'sweet', 'beverage', 'fat', 'spice',
 ]);
 
 export const REGION_VALUES: ReadonlySet<CuisineRegion> = new Set<CuisineRegion>([

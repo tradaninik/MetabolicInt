@@ -154,7 +154,7 @@ foreign-key constraint.
 | Field | Rule | Default when absent |
 |---|---|---|
 | name | trim, collapse whitespace, strip control characters, 2-60 chars - required | - |
-| category | one of the 13 FoodCategory values | snack |
+| category | one of the 14 FoodCategory values (P7.1 added spice for raw ingredients) | snack |
 | region | one of the 11 CuisineRegion values | the user's profile region |
 | servingGrams | finite, 1-2000 | 100 |
 | katoriGrams | finite, 1-2000, optional | null (no katori portion option) |

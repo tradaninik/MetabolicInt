@@ -56,6 +56,7 @@ const CATEGORY_CHIPS: { label: string; value: string }[] = [
   { label: 'Sweets', value: 'sweet' },
   { label: 'Drinks', value: 'beverage' },
   { label: 'Fats', value: 'fat' },
+  { label: 'Spices', value: 'spice' },
 ];
 
 const WHEN_OPTIONS: { label: string; minutes: number }[] = [

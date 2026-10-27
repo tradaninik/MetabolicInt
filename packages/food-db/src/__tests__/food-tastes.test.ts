@@ -2,14 +2,18 @@
 // The rules below are the editorial review checklist, expressed as code.
 
 import { describe, it, expect } from 'vitest';
-import { FOODS, FOOD_TASTES, tasteOf, findTasteByName, findHealingFoodByName } from '../index';
+import { FOODS, FOOD_TASTES, tasteOf, findTasteByName, findHealingFoodByName, isIngredientFoodId } from '../index';
 import { doshaFoodAdvice, RASA_ORDER, type Rasa, type Virya } from '@mi/engine';
 
 describe('food-tastes dataset integrity', () => {
-  it('covers every curated food exactly - no missing ids, no stale ids', () => {
+  it('covers every curated DISH exactly - no missing ids, no stale ids', () => {
     const foodIds = new Set(FOODS.map((f) => f.id));
     const tasteIds = new Set(Object.keys(FOOD_TASTES));
-    const missing = [...foodIds].filter((id) => !tasteIds.has(id));
+    // P7.1: raw ingredients (the new recipe-building catalog) are not required
+    // to carry classical taste data yet - the overlay never guesses ("no
+    // match, no badge"), and rasas for staples get curated deliberately in a
+    // fast-follow, not typed in a hurry. The stale-id guard stays absolute.
+    const missing = [...foodIds].filter((id) => !tasteIds.has(id) && !isIngredientFoodId(id));
     const stale = [...tasteIds].filter((id) => !foodIds.has(id));
     expect(missing).toEqual([]);
     expect(stale).toEqual([]);

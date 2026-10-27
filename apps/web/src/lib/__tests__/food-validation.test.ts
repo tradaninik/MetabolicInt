@@ -10,9 +10,10 @@ const FALLBACK_REGION = [...REGION_VALUES][0] as CuisineRegion;
 const base = { fallbackRegion: FALLBACK_REGION };
 
 describe('spec pin - docs/CUSTOM-FOODS-V2.md sections 5 and 11', () => {
-  it('engine unions pinned: 13 categories (incl nut, unused by catalog), 11 regions', () => {
-    expect(CATEGORY_VALUES.size).toBe(13);
+  it('engine unions pinned: 14 categories (nut + spice, unused by the dish catalog), 11 regions', () => {
+    expect(CATEGORY_VALUES.size).toBe(14);
     expect(CATEGORY_VALUES.has('nut')).toBe(true); // the 13th: catalog has no nut foods
+    expect(CATEGORY_VALUES.has('spice')).toBe(true); // P7.1 14th: raw spices from the ingredient catalog
     expect(REGION_VALUES.size).toBe(11);
     expect(CATEGORY_VALUES.has('snack')).toBe(true); // the default category
   });

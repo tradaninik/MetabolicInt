@@ -26,11 +26,12 @@ import { kerala } from './data/kerala';
 import { maharashtrian } from './data/maharashtrian';
 import { rajasthani } from './data/rajasthani';
 import { global } from './data/global';
+import { ingredientFoods, INGREDIENT_IDS, CATALOG_INGREDIENT_IDS } from './data/ingredients';
 import { healingFoods } from './data/healing-foods';
 import { foodTastes } from './data/food-tastes';
 import { viruddhaTags, viruddhaTagNames } from './data/viruddha-tags';
 
-/** All foods, flat. */
+/** All foods, flat - cooked dishes AND (P7.1) the raw-ingredient catalog. */
 export const FOODS: Food[] = [
   ...southIndian,
   ...northIndian,
@@ -43,7 +44,11 @@ export const FOODS: Food[] = [
   ...maharashtrian,
   ...rajasthani,
   ...global,
+  ...ingredientFoods,
 ];
+
+/** P7.1: re-exported for the recipe pipeline + ingredient search. */
+export { ingredientFoods, INGREDIENT_IDS, CATALOG_INGREDIENT_IDS };
 
 /** Fast lookup by id. */
 export const FOOD_INDEX: Record<string, Food> = Object.fromEntries(
@@ -154,6 +159,28 @@ export function searchFoods(query: string, limit = 20): Food[] {
   if (!q) return FOODS.slice(0, limit);
   const starts = FOODS.filter((f) => f.name.toLowerCase().startsWith(q));
   const contains = FOODS.filter((f) => {
+    if (f.name.toLowerCase().startsWith(q)) return false;
+    const names = [f.name, ...(f.aliases ?? [])].map((n) => n.toLowerCase());
+    return names.some((n) => n.includes(q));
+  });
+  return [...starts, ...contains].slice(0, limit);
+}
+
+/** P7.1: is this catalog entry a raw ingredient (a recipe building block)? */
+const INGREDIENT_ID_SET = new Set(INGREDIENT_IDS);
+export function isIngredientFoodId(id: string): boolean {
+  return INGREDIENT_ID_SET.has(id);
+}
+
+/** P7.1: ingredient-only search for the recipe editor - "cook with what I
+ * have" searches building blocks (rice, dal, onion), never cooked dishes
+ * (biryani, dosa). Same ranking rules as searchFoods. */
+export function searchIngredients(query: string, limit = 20): Food[] {
+  const q = query.toLowerCase().trim();
+  const pool = FOODS.filter((f) => isIngredientFoodId(f.id));
+  if (!q) return pool.slice(0, limit);
+  const starts = pool.filter((f) => f.name.toLowerCase().startsWith(q));
+  const contains = pool.filter((f) => {
     if (f.name.toLowerCase().startsWith(q)) return false;
     const names = [f.name, ...(f.aliases ?? [])].map((n) => n.toLowerCase());
     return names.some((n) => n.includes(q));

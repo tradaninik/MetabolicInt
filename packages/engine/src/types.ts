@@ -29,7 +29,8 @@ export type FoodCategory =
   | 'snack'
   | 'sweet'
   | 'beverage'
-  | 'fat';
+  | 'fat'
+  | 'spice'; // P7.1: raw spices/condiments (turmeric, salt, tamarind...)
 
 export interface Food {
   id: string;
