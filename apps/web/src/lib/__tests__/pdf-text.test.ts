@@ -7,7 +7,7 @@
 // (Thyrocare Aarogyam C) is a smoke test when the file is present - the whole
 // point of this workstream: uploaded PDFs must extract cleanly instead of
 // turning into mojibake.
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { deflateSync } from 'node:zlib';
 import { extractPdfText } from '../pdf-text';
@@ -233,13 +233,21 @@ describe('extractPdfText — synthetic PDFs (FlateDecode streams)', () => {
 
 const REAL_PDF = '/home/z/my-project/upload/AE92717100070202409_RLS.pdf';
 
+// P7.1: the file read happens inside beforeAll, NOT in the describe body -
+// vitest still runs describe callbacks at collection time (even for skipped
+// suites), and a top-level readFileSync here made the whole suite FAIL (not
+// skip) on any machine without the founder's local upload/ directory.
 describe.skipIf(!existsSync(REAL_PDF))('extractPdfText — real Thyrocare report (16 pages, subset fonts)', () => {
-  const r = extractPdfText(readFileSync(REAL_PDF));
-  const text = 'error' in r ? '' : r.text;
-  const pages = 'error' in r ? 0 : r.pages;
+  let text = '';
+  let pages = 0;
+
+  beforeAll(() => {
+    const r = extractPdfText(readFileSync(REAL_PDF));
+    text = 'error' in r ? '' : r.text;
+    pages = 'error' in r ? 0 : r.pages;
+  });
 
   it('extracts a real text layer (not mojibake, not an error)', () => {
-    expect('error' in r).toBe(false);
     expect(text.length).toBeGreaterThan(1500);
     expect(pages).toBeGreaterThanOrEqual(14);
   });
