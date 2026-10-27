@@ -13,6 +13,8 @@ const NAV = [
   { href: '/healing-foods', label: 'Food as Medicine' },
   { href: '/log', label: 'Log a meal' },
   { href: '/my-foods', label: 'My Foods' },
+  // P8 Day 3: the 300-recipe diabetic-friendly catalog browser.
+  { href: '/recipes', label: 'Recipes' },
   // P6-b: coach + insights unified into the single Insights tab (/coach redirects).
   { href: '/insights', label: 'Insights' },
   { href: '/indian', label: 'Indian MI' },
