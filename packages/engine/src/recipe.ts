@@ -183,3 +183,20 @@ export function recipeNutrition(
     },
   };
 }
+
+// P8 — carb tier: the coarse per-serving carb band the catalog recipe
+// search filters and the UI badge display on. Net carbs per serving (the
+// same number recipeNutrition computes), so the tier can never disagree
+// with the macros a recipe actually logs. Thresholds: LOW < 20 g,
+// MODERATE 20-40 g, HIGHER >= 40 g.
+export type CarbTier = 'LOW' | 'MODERATE' | 'HIGHER';
+
+export const CARB_TIER_LOW_MAX = 20; // net carbs strictly below this = LOW
+export const CARB_TIER_MODERATE_MAX = 40; // net carbs up to this = MODERATE
+
+export function carbTier(netCarbsPerServing: number): CarbTier {
+  if (!Number.isFinite(netCarbsPerServing)) return 'HIGHER';
+  if (netCarbsPerServing < CARB_TIER_LOW_MAX) return 'LOW';
+  if (netCarbsPerServing <= CARB_TIER_MODERATE_MAX) return 'MODERATE';
+  return 'HIGHER';
+}
