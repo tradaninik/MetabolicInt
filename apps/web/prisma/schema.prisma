@@ -419,6 +419,43 @@ model CustomLabTest {
   @@index([userId])
 }
 
+/// P8: the seeded 300-recipe diabetic-friendly catalog (shared, read-only for
+/// users; "save to my recipes" copies items into the user's own Recipe row).
+/// id = the seed slug (stable upsert key). items JSON is the same
+/// {foodId, portionType, portionValue} triple as user recipes, so catalog rows
+/// reuse recipeNutrition + the /log tray unchanged. Macro columns are per
+/// SERVING and are COMPUTED by the seed pipeline (ingredient grams x per-100g
+/// from @mi/food-db, via @mi/engine recipeNutrition) — never hand-entered;
+/// carbTier is derived from netCarbsG (LOW < 20, MODERATE 20-40, HIGHER >= 40).
+model CatalogRecipe {
+  id          String   @id // seed slug, e.g. "vegetable-millet-upma"
+  name        String
+  nameTe      String? // Telugu display name (Hyderabad users)
+  mealType    String // breakfast | lunch | dinner | snack | drink | side
+  cuisine     String // telugu | hyderabadi | south-indian | north-indian | pan-indian
+  servings    Float
+  prepMinutes Int
+  items       String // JSON [{foodId, portionType:'grams', portionValue}]
+  steps       String // JSON string[] (3-8 steps)
+  tags        String // JSON string[] (controlled vocab, data/recipes/types.ts)
+  notes       String? // the diabetic angle: swap / portion logic / leftover use
+  // per-serving macros — pipeline-computed at seed time (iron law)
+  kcal        Float
+  carbsG      Float
+  netCarbsG   Float
+  proteinG    Float
+  fatG        Float
+  fiberG      Float
+  gi          Float // net-carb weighted, same convention as user recipes
+  carbTier    String // LOW | MODERATE | HIGHER (engine carbTier(netCarbsG))
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([mealType])
+  @@index([carbTier])
+  @@index([cuisine])
+}
+
 /// Phase 2c: medications — adherence display only.
 /// Deliberately NO dose/strength/notes fields anywhere (safety posture, blueprint §8).
 model Medication {

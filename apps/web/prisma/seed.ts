@@ -1,5 +1,11 @@
 import { prisma } from '../src/lib/prisma';
-import { FOODS } from '@mi/food-db';
+import {
+  FOODS,
+  FOOD_INDEX,
+  catalogRecipes,
+  CATALOG_RECIPE_TARGET,
+} from '@mi/food-db';
+import { recipeNutrition, carbTier } from '@mi/engine';
 import bcrypt from 'bcryptjs';
 
 async function main() {
@@ -157,6 +163,75 @@ async function main() {
   });
 
   console.log('  ✓ demo user + 14-day history seeded');
+
+  // P8: seed the 300-recipe catalog. IRON LAW: every macro column is
+  // COMPUTED here via @mi/engine recipeNutrition from ingredient grams x
+  // per-100g values (FOOD_INDEX) — nothing hand-entered, ever. carbTier is
+  // derived from the computed net carbs. Upsert by id (the seed slug) so
+  // re-running the seed updates macro math when an ingredient value or a
+  // recipe's grams change — the catalog can never drift from the engine.
+  console.log('🌱 Seeding catalog recipes…');
+  let tierLow = 0;
+  let tierModerate = 0;
+  let tierHigher = 0;
+  for (const r of catalogRecipes) {
+    const n = recipeNutrition(r.items, FOOD_INDEX, r.servings);
+    const tier = carbTier(n.perServing.netCarbsG);
+    if (tier === 'LOW') tierLow++;
+    else if (tier === 'MODERATE') tierModerate++;
+    else tierHigher++;
+    await prisma.catalogRecipe.upsert({
+      where: { id: r.slug },
+      create: {
+        id: r.slug,
+        name: r.name,
+        nameTe: r.nameTe ?? null,
+        mealType: r.mealType,
+        cuisine: r.cuisine,
+        servings: r.servings,
+        prepMinutes: r.prepMinutes,
+        items: JSON.stringify(r.items),
+        steps: JSON.stringify(r.steps),
+        tags: JSON.stringify(r.tags),
+        notes: r.notes ?? null,
+        kcal: n.perServing.kcal,
+        carbsG: n.perServing.carbsG,
+        netCarbsG: n.perServing.netCarbsG,
+        proteinG: n.perServing.proteinG,
+        fatG: n.perServing.fatG,
+        fiberG: n.perServing.fiberG,
+        gi: n.perServing.gi,
+        carbTier: tier,
+      },
+      update: {
+        name: r.name,
+        nameTe: r.nameTe ?? null,
+        mealType: r.mealType,
+        cuisine: r.cuisine,
+        servings: r.servings,
+        prepMinutes: r.prepMinutes,
+        items: JSON.stringify(r.items),
+        steps: JSON.stringify(r.steps),
+        tags: JSON.stringify(r.tags),
+        notes: r.notes ?? null,
+        kcal: n.perServing.kcal,
+        carbsG: n.perServing.carbsG,
+        netCarbsG: n.perServing.netCarbsG,
+        proteinG: n.perServing.proteinG,
+        fatG: n.perServing.fatG,
+        fiberG: n.perServing.fiberG,
+        gi: n.perServing.gi,
+        carbTier: tier,
+      },
+    });
+  }
+  if (catalogRecipes.length !== CATALOG_RECIPE_TARGET) {
+    throw new Error(`Catalog recipes: expected ${CATALOG_RECIPE_TARGET}, got ${catalogRecipes.length}`);
+  }
+  console.log(
+    `  ✓ ${catalogRecipes.length} catalog recipes (LOW ${tierLow} / MODERATE ${tierModerate} / HIGHER ${tierHigher})`,
+  );
+
   console.log('');
   console.log('Login: demo@metabolic.dev / demo1234');
 }
