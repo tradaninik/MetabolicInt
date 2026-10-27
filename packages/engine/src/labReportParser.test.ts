@@ -153,9 +153,11 @@ describe('parseLabReportText — Metropolis-style with numbering and duplicates'
   });
 
   it('reports non-catalog analytes as unmatched with suggestions available', () => {
-    const hb = r.unmatched.find((u) => /Hb \(Haemoglobin\)/i.test(u.name));
-    expect(hb).toBeDefined();
-    expect(hb?.value).toBe(13.6);
+    // P7.1: hemoglobin joined the catalog, so this row now MAPS (that is the
+    // fix) - the honest-unmatched case is covered by the noise fixtures below.
+    const byKey = new Map(r.matches.map((m) => [m.testKey, m]));
+    expect(byKey.get('hemoglobin')?.value).toBeCloseTo(13.6, 1);
+    expect(byKey.get('hemoglobin')?.confidence).toBe(1);
   });
 });
 
@@ -219,5 +221,136 @@ describe('parseLabReportText — honesty guards', () => {
     const r = parseLabReportText('Report generated 2026 total tests run');
     expect(r.matches).toEqual([]);
     expect(r.unmatched).toEqual([]);
+  });
+});
+
+// P7.1 — the real Hyderabad report from the live smoke test: assay methods
+// glued onto values, repeated address blocks, registration numbers, range
+// legends and age-banded tables in the noise, full CBC + urine + proteins
+// in the results. Every assertion below is a value printed on that report.
+const REAL_REPORT_P71 = `
+SRI RAM DIAGNOSTICS (A UNIT OF SRI RAM LABS LLP)
+MANIKONDA HYDERABAD500089
+MANIKONDA HYDERABAD500089
+NO 6LH1204
+Patient Name : K RAMESH
+Age / Gender : 44 Years / Male
+Referred by : Dr. S Rao, MD
+Sample Collected on : 20/10/2026 08:16
+Reported on : 21/10/2026 14:05
+Male: 225 -535
+Adults: Less than25
+11 - 60 Years : 0.8 - 1.2
+4 - 10 Yrs 130 - 200
+GLYCATED HAEMOGLOBIN (HBA1C) H.P.L.C5.5 % 4.3 - 5.6
+FASTING BLOOD SUGAR PHOTOMETRY96 mg/dL 70 - 100
+TOTAL CHOLESTEROL PHOTOMETRY188 mg/dL 130 - 200
+HDL CHOLESTEROL 48 mg/dL 40 - 60
+LDL CHOLESTEROL CALCULATED112 mg/dL < 100
+TRIGLYCERIDES GPO-PAP145 mg/dL < 150
+TC/HDL RATIO 3.9 < 5.0
+UREA PHOTOMETRY24 mg/dL 17 - 43
+CREATININE JAFFE0.94 mg/dL 0.7 - 1.3
+URIC ACID PHOTOMETRY5.8 mg/dL 3.5 - 7.2
+CALCIUM 9.4 mg/dL 8.6 - 10.3
+GAMMA GLUTAMYL TRANSFERASE (GGT) PHOTOMETRY17.7 U/L 10.0 - 71.0
+TOTAL PROTEIN PHOTOMETRY7.45 g/dl 6.4 - 8.3
+ALBUMIN BCP4.4 g/dl 3.5 - 5.2
+BUN / CREATININE RATIO 18.5 12 - 20
+HAEMOGLOBIN PHOTOMETRY14.8 g/dl 13.0 - 17.0
+TOTAL LEUCOCYTE COUNT 6.2 10^3/uL 4.0 - 10.0
+NEUTROPHILS 62 % 40 - 75
+LYMPHOCYTES 28 % 20 - 45
+EOSINOPHILS 4 % 1 - 6
+BASOPHILS 0.0 % 0.0 - 1.0
+IMMATURE GRANULOCYTES 0.1 % 0.0 - 0.5
+ABSOLUTE NEUTROPHIL COUNT 3.8 10^3/uL 2.0 - 7.5
+RBC COUNT 4.9 10^6/uL 4.5 - 5.9
+PCV 44.5 % 40 - 50
+MCV 89.2 fL 83 - 101
+MCH 29.4 pg 27 - 32
+MCHC 33.2 g/dl 32 - 36
+RDW-SD 42.1 fL 35 - 56
+RDW-CV 12.8 % 11.5 - 14.5
+PLATELET COUNT 230 10^3/uL 150 - 410
+MPV 9.8 fL 7.5 - 11.5
+P-LCR 24.5 % 13 - 43
+PCT 0.22 % 0.1 - 0.5
+SPECIFIC GRAVITY 1.015 1.005 - 1.030
+URINE PH 6.0 4.5 - 8.0
+UROBILINOGEN 0.2 mg/dL < 1.0
+URINE ALBUMIN - CREATININE RATIO (uACR) 12 mg/g < 30
+`;
+
+describe('parseLabReportText — P7.1 real-report regression', () => {
+  const r = parseLabReportText(REAL_REPORT_P71);
+
+  it('captures patient demographics (age/sex) from the header for range selection', () => {
+    expect(r.patientAge).toBe(44);
+    expect(r.patientSex).toBe('male');
+    expect(r.performedAt).toBe('2026-10-20'); // collected date wins over reported
+  });
+
+  it('unglues assay methods from values: GGT 17.7, protein 7.45, HbA1c 5.5, creatinine 0.94, albumin 4.4', () => {
+    const byKey = new Map(r.matches.map((m) => [m.testKey, m]));
+    expect(byKey.get('ggt')?.value).toBe(17.7);
+    expect(byKey.get('ggt')?.unit).toBe('U/L');
+    expect(byKey.get('ggt')?.refLow).toBe(10);
+    expect(byKey.get('ggt')?.refHigh).toBe(71);
+    expect(byKey.get('ggt')?.asPrinted).not.toContain('PHOTOMETRY');
+    expect(byKey.get('protein_total')?.value).toBeCloseTo(7.45, 2);
+    expect(byKey.get('hba1c')?.value).toBe(5.5);
+    expect(byKey.get('hba1c')?.refHigh).toBe(5.6);
+    expect(byKey.get('creatinine')?.value).toBeCloseTo(0.94, 2);
+    expect(byKey.get('albumin')?.value).toBeCloseTo(4.4, 1);
+  });
+
+  it('parses the full CBC with real values incl. the zero-valued basophils row', () => {
+    const byKey = new Map(r.matches.map((m) => [m.testKey, m]));
+    expect(byKey.get('hemoglobin')?.value).toBeCloseTo(14.8, 1);
+    expect(byKey.get('platelets')?.value).toBe(230);
+    expect(byKey.get('tlc')?.value).toBeCloseTo(6.2, 1);
+    expect(byKey.get('neutrophils_pct')?.value).toBe(62);
+    expect(byKey.get('basophils_pct')?.value).toBe(0);
+    expect(byKey.get('ig')?.value).toBeCloseTo(0.1, 1);
+    expect(byKey.get('neutrophils_abs')?.value).toBeCloseTo(3.8, 1);
+    expect(byKey.get('rbc')?.value).toBeCloseTo(4.9, 1);
+    expect(byKey.get('hematocrit')?.value).toBeCloseTo(44.5, 1);
+    expect(byKey.get('mcv')?.value).toBeCloseTo(89.2, 1);
+    expect(byKey.get('mch')?.value).toBeCloseTo(29.4, 1);
+    expect(byKey.get('mchc')?.value).toBeCloseTo(33.2, 1);
+    expect(byKey.get('rdw_sd')?.value).toBeCloseTo(42.1, 1);
+    expect(byKey.get('rdw_cv')?.value).toBeCloseTo(12.8, 1);
+    expect(byKey.get('mpv')?.value).toBeCloseTo(9.8, 1);
+    expect(byKey.get('plcr')?.value).toBeCloseTo(24.5, 1);
+    expect(byKey.get('pct')?.value).toBeCloseTo(0.22, 2);
+  });
+
+  it('maps the lipid ratios, kidney extras and urine routine', () => {
+    const byKey = new Map(r.matches.map((m) => [m.testKey, m]));
+    expect(byKey.get('ldl')?.value).toBe(112);
+    expect(byKey.get('ldl')?.refHigh).toBe(100);
+    expect(byKey.get('triglycerides')?.value).toBe(145);
+    expect(byKey.get('tc_hdl_ratio')?.value).toBeCloseTo(3.9, 1);
+    expect(byKey.get('uric_acid')?.value).toBeCloseTo(5.8, 1);
+    expect(byKey.get('calcium')?.value).toBeCloseTo(9.4, 1);
+    expect(byKey.get('bun_creatinine_ratio')?.value).toBeCloseTo(18.5, 1);
+    expect(byKey.get('specific_gravity')?.value).toBeCloseTo(1.015, 3);
+    expect(byKey.get('urine_ph')?.value).toBeCloseTo(6.0, 1);
+    expect(byKey.get('urobilinogen')?.value).toBeCloseTo(0.2, 1);
+    expect(byKey.get('uacr')?.value).toBe(12);
+  });
+
+  it('noise never reaches matches or unmatched: addresses, reg numbers, range legends, age bands', () => {
+    const everywhere = [...r.matches.map((m) => m.line), ...r.unmatched.map((u) => u.line)].join(' | ');
+    expect(everywhere).not.toContain('MANIKONDA');
+    expect(everywhere).not.toContain('6LH1204');
+    expect(everywhere).not.toContain('225');
+    expect(everywhere).not.toContain('Less than25');
+    expect(everywhere).not.toMatch(/11 - 60 Years/);
+    expect(everywhere).not.toMatch(/4 - 10 Yrs/);
+    // and nothing crashed into unmatched from the demographic/header lines
+    expect(r.unmatched.map((u) => u.name).join(' ')).not.toContain('Patient Name');
+    expect(r.unmatched.map((u) => u.name).join(' ')).not.toContain('Referred by');
   });
 });

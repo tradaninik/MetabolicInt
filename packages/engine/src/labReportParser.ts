@@ -44,12 +44,44 @@ export interface LabParseResult {
   unmatched: LabUnmatchedLine[];
   performedAt?: string; // YYYY-MM-DD when a report date was found
   labName?: string; // recognized Indian lab chain, if any
+  /** P7.1: patient demographics printed on the report (age in years, sex) -
+   * used only to pick display-only default reference ranges. */
+  patientAge?: number;
+  patientSex?: 'male' | 'female';
   format: 'text' | 'csv';
 }
 
-const UNIT_RE = /^(?:mg\/dl|mg\/d l|mg%|mg\/l|ug\/dl|µg\/dl|ng\/ml|ng\/d l|pg\/ml|u\/l|iu\/l|uiu\/ml|µiu\/ml|μiu\/ml|µu\/ml|uu\/ml|miu\/l|mmol\/l|g\/dl|gm\/dl|%|percent|mmol\/mol|m\/mol|mg\/g|ug\/g|nmol\/l|pmol\/l|ml\/min|ml\/min\/1.73m2|iu\/ml|u\/ml|ng\/dl)$/i;
+const UNIT_RE = /^(?:mg\/dl|mg\/d l|mg%|mg\/l|ug\/dl|µg\/dl|ng\/ml|ng\/d l|pg\/ml|u\/l|iu\/l|uiu\/ml|µiu\/ml|μiu\/ml|µu\/ml|uu\/ml|miu\/l|mmol\/l|g\/dl|gm\/dl|%|percent|mmol\/mol|m\/mol|mg\/g|ug\/g|nmol\/l|pmol\/l|ml\/min|ml\/min\/1.73m2|iu\/ml|u\/ml|ng\/dl|10\^3\/µl|10\^3\/ul|10\^3\/mm3|10\^6\/µl|10\^6\/ul|10\^6\/l|10\^12\/l|10\*3\/µl|10\*3\/ul|cells\/cmm|cells\/cumm|cells\/ul|cells\/mm3|cumm|cmm|m\/cmm|\/cmm|\/cumm|lakhs?\/cumm|mill\/cumm|fl|pg|eu\/dl)$/i;
 
 const LAB_CHAINS = ['thyrocare', 'metropolis', 'dr lal', 'lal pathlabs', 'lal path labs', 'srl', 'apollo', 'nutrica', 'vlcc', 'healthians', 'redcliffe', 'cadila', 'neuberg'];
+
+// P7.1 — assay-method tokens the labs glue onto the name or even onto the
+// value ("GAMMA GLUTAMYL TRANSFERASE (GGT) PHOTOMETRY17.7", "H.P.L.C5.5").
+// They are never part of a test name, so they are split off before matching.
+const METHOD_RE_SOURCE =
+  'IMMUNOTURBIDIMETRY|TURBIDIMETRY|SPECTROPHOTOMETRY|PHOTOMETRY|CALCULATED|H\\.?P\\.?L\\.?C|CMIA|ECLIA|EIA|JAFFE|HEXOKINASE|ENZYMATIC|CHOD\\-?PAP|GPO\\-?PAP|IMMUNOASSAY|IFCC|KINETIC|BCP|BCG|ISE|CLIA|ELFA';
+/** method glued directly to a number -> insert a space ("PHOTOMETRY17.7"). */
+const METHOD_GLUED_RE = new RegExp(`\\b(${METHOD_RE_SOURCE})(?=\\d)`, 'gi');
+/** method token normalized (letters only, uppercase) for trailing-strip. */
+function methodToken(tok: string): string {
+  return tok.toUpperCase().replace(/[^A-Z]/g, '');
+}
+const METHOD_TOKENS = new Set(
+  [
+    'IMMUNOTURBIDIMETRY', 'TURBIDIMETRY', 'SPECTROPHOTOMETRY', 'PHOTOMETRY',
+    'CALCULATED', 'HPLC', 'CMIA', 'ECLIA', 'EIA', 'JAFFE', 'HEXOKINASE',
+    'ENZYMATIC', 'CHODPAP', 'GPOPAP', 'IMMUNOASSAY', 'IFCC', 'KINETIC',
+    'BCP', 'BCG', 'ISE', 'CLIA', 'ELFA',
+  ],
+);
+/** Strip trailing assay-method tokens off a printed test name. */
+function stripTrailingMethodTokens(name: string): string {
+  const toks = name.split(/\s+/).filter(Boolean);
+  while (toks.length > 1 && METHOD_TOKENS.has(methodToken(toks[toks.length - 1]))) {
+    toks.pop();
+  }
+  return toks.join(' ').replace(/\s*[:,]\s*$/, '').trim();
+}
 
 const HEADER_HINTS = [
   'test name', 'test parameter', 'parameter', 'investigation', 'observation',
@@ -58,11 +90,13 @@ const HEADER_HINTS = [
   'referred by', 'ref. by', 'ref by', 'collected', 'received', 'reported',
   'released', 'registered', 'accession', 'barcode',
   'method', 'technolog', ' printed', 'page ', 'www.', 'terms and conditions',
-  // Reference-range legend + assay-boilerplate lines (never test rows):
-  'male :', 'female :', 'adult :', 'adults :', 'normal :', 'deficiency',
+  // Reference-range legend + assay-boilerplate lines (never test rows).
+  // Colons are matched whitespace-insensitively (see looksLikeHeaderOrMeta),
+  // so "Male :" and "Male:" are both legends.
+  'male:', 'female:', 'adult:', 'adults:', 'normal:', 'deficiency',
   'insufficiency', 'sufficiency', 'toxicity', 'intra assay', 'inter assay',
   'specifications', '%cv', 'precision', 'sensitivity:', 'standardization',
-  'correlate with clinical', 'yrs :', 'years :', 'menopause', 'months :',
+  'correlate with clinical', 'yrs:', 'years:', 'menopause', 'months:',
 ];
 
 /** Date coercion: dd/mm/yyyy, dd-mm-yyyy, dd.mm.yy, yyyy-mm-dd -> YYYY-MM-DD. */
@@ -108,14 +142,23 @@ function dateFromText(rest: string): string | undefined {
   return undefined;
 }
 
-/** Extract a report date + lab chain from prose lines (best effort).
- * Collection dates win over released/reported dates (that is when the blood
- * was actually drawn); dates are only read from date-word lines so prose
- * citations like "Clin Chem Lab Med 2000;38:1003-11" can never fake one. */
-function scanMeta(lines: string[]): { performedAt?: string; labName?: string } {
+/** Extract a report date + lab chain + patient demographics from prose lines
+ * (best effort). Collection dates win over released/reported dates (that is
+ * when the blood was actually drawn); dates are only read from date-word lines
+ * so prose citations like "Clin Chem Lab Med 2000;38:1003-11" can never fake
+ * one. P7.1: age/sex are read from demographic lines ("Age / Gender : 46
+ * Years / Male") - display-only defaults, never stored as profile facts. */
+function scanMeta(lines: string[]): {
+  performedAt?: string;
+  labName?: string;
+  patientAge?: number;
+  patientSex?: 'male' | 'female';
+} {
   let collectedAt: string | undefined;
   let otherDate: string | undefined;
   let labName: string | undefined;
+  let patientAge: number | undefined;
+  let patientSex: 'male' | 'female' | undefined;
   const dateWords = /(?:sample\s+)?(collected|reported|received|registered|released|done|date)\s*[:\-]?\s*(?:on\s*)?/i;
   for (const line of lines) {
     const low = line.toLowerCase();
@@ -130,6 +173,15 @@ function scanMeta(lines: string[]): { performedAt?: string; labName?: string } {
         }
       }
     }
+    if (patientAge == null && patientSex == null && /\b(age|sex|gender)\b/.test(low)) {
+      const am = /\bage\b[^0-9]{0,25}(\d{1,3})/.exec(low) ?? /(\d{1,3})\s*(?:years?|yrs?)\b/.exec(low);
+      if (am) {
+        const n = Number(am[1]);
+        if (n >= 1 && n <= 120) patientAge = n;
+      }
+      if (/\bfemale\b/.test(low)) patientSex = 'female';
+      else if (/\bmale\b/.test(low)) patientSex = 'male';
+    }
     const dw = dateWords.exec(line);
     if (dw) {
       const rest = line.slice((dw.index ?? 0) + dw[0].length);
@@ -140,7 +192,12 @@ function scanMeta(lines: string[]): { performedAt?: string; labName?: string } {
       }
     }
   }
-  return { performedAt: collectedAt ?? otherDate, labName };
+  return {
+    performedAt: collectedAt ?? otherDate,
+    labName,
+    ...(patientAge != null ? { patientAge } : {}),
+    ...(patientSex != null ? { patientSex } : {}),
+  };
 }
 
 /** Split a line into whitespace tokens, keeping range patterns glued. */
@@ -155,6 +212,15 @@ function isNumericToken(tok: string): boolean {
 /** 4-digit tokens in 1900-2100 are far more likely years than values. */
 function looksLikeYear(tok: string): boolean {
   return /^(19|20)\d{2}$/.test(tok);
+}
+
+/** P7.1: standalone 6-digit integers are pincodes / registration numbers in
+ * report headers and footers, not clinical values ("MANIKONDA HYDERABAD
+ * 500089"). No catalog test has a plausible 6-digit value. */
+function looksLikePincode(tok: string): boolean {
+  if (!/^\d{6}$/.test(tok)) return false;
+  const n = Number(tok);
+  return n >= 100000 && n <= 999999;
 }
 
 function num(tok: string): number {
@@ -235,6 +301,9 @@ function parseLine(line: string): { name: string; value: number; unit: string; r
   let s = line.replace(/\s+/g, ' ').trim();
   if (!s || s.length < 4) return null;
   s = s.replace(/[|;]+/g, ' ').trim();
+  // P7.1: unglue assay methods welded onto the value ("PHOTOMETRY17.7",
+  // "H.P.L.C5.5") so the name and the value separate cleanly.
+  s = s.replace(METHOD_GLUED_RE, '$1 ').replace(/\s+/g, ' ').trim();
 
   const tokens = tokenize(s);
   if (tokens.length < 2) return null;
@@ -242,23 +311,31 @@ function parseLine(line: string): { name: string; value: number; unit: string; r
   // The value: first numeric token followed by a unit token, else a numeric
   // token followed by a range-looking tail, else the LAST numeric token.
   let valueIdx = -1;
+  let guided = false; // value found next to a unit or a reference range
   for (let i = 0; i < tokens.length; i++) {
     if (!isNumericToken(tokens[i])) continue;
     const next = tokens[i + 1] ?? '';
     const afterNext = tokens.slice(i + 1).join(' ');
     if (UNIT_RE.test(next)) {
       valueIdx = i;
+      guided = true;
       break;
     }
     if (parseRange(afterNext).refLow != null || parseRange(afterNext).refHigh != null) {
       valueIdx = i;
+      guided = true;
       break;
     }
   }
   if (valueIdx < 0) {
     // last standalone numeric token (value with no unit and no range)
     for (let i = tokens.length - 1; i >= 0; i--) {
-      if (isNumericToken(tokens[i]) && i > 0 && !looksLikeYear(tokens[i])) {
+      if (
+        isNumericToken(tokens[i]) &&
+        i > 0 &&
+        !looksLikeYear(tokens[i]) &&
+        !looksLikePincode(tokens[i])
+      ) {
         valueIdx = i;
         break;
       }
@@ -267,9 +344,14 @@ function parseLine(line: string): { name: string; value: number; unit: string; r
   if (valueIdx < 1) return null; // a value with no name is not a test row
 
   const value = num(tokens[valueIdx]);
-  if (!Number.isFinite(value) || value <= 0) return null;
+  // A zero is a real value only when the row carries a unit or a printed
+  // range (basophils 0.0 %, urobilinogen 0.0 mg/dL); bare trailing zeros in
+  // prose are junk.
+  if (!Number.isFinite(value) || value < 0 || (!guided && value <= 0)) return null;
 
-  const name = tokens.slice(0, valueIdx).join(' ').replace(/\s*[:,]\s*$/, '').trim();
+  const name = stripTrailingMethodTokens(
+    tokens.slice(0, valueIdx).join(' ').replace(/\s*[:,]\s*$/, ''),
+  );
   if (!name || !/[a-z]/i.test(name)) return null; // needs letters to be a test name
 
   let unit = '';
@@ -297,10 +379,23 @@ function parseLine(line: string): { name: string; value: number; unit: string; r
 }
 
 function looksLikeHeaderOrMeta(line: string): boolean {
-  const low = line.toLowerCase();
+  // P7.1: colons are matched whitespace-insensitively - "Male :" and "Male:"
+  // are the same legend ("Male: 225 -535" is a range legend, not a test row).
+  const low = line.toLowerCase().replace(/\s*:\s*/g, ':');
   // Address/pincode tails like "Hyderabad -500 044" (Indian 6-digit pincodes
   // printed as two 3-digit groups after a dash) are never test rows.
-  if (/-\s?\d{3}\s+\d{3}\s*$/.test(line)) return true;
+  if (/-'?\d{3}\s+\d{3}\s*$/.test(line) || /-\s?\d{3}\s+\d{3}\s*$/.test(line)) return true;
+  // P7.1: words glued to a 6-digit pincode ("MANIKONDA HYDERABAD500089") and
+  // standalone 6-digit pincodes are address blocks, not test rows.
+  if (/\b[A-Za-z]+\d{6}\b/.test(line)) return true;
+  if (/^\d{6}$/.test(low.trim())) return true;
+  // P7.1: lab registration numbers ("NO 6LH1204", "Regn No 12345") - a "No"
+  // followed by a single alphanumeric code containing a digit.
+  if (/^n[o0]\.?[\s:,-]*[0-9a-z]*\d[0-9a-z]*$/i.test(low.trim())) return true;
+  if (/^(reg|regn|registration)\.?\s*(no|number|#)?\.?[\s:,-]*[0-9a-z]*\d[0-9a-z]*$/i.test(low.trim())) return true;
+  // P7.1: age-banded reference-range tables ("11 - 60 Years : ...", "4 - 10
+  // Yrs") are legends, not results.
+  if (/(?:^|\s)\d+\s*[-\u2013]\s*\d+\s*(?:yrs?|years|months|days)\b/i.test(low)) return true;
   if (!/\d/.test(line) && !/[:]/.test(line)) {
     // Pure prose without digits - only skip if it matches known header words.
     return HEADER_HINTS.some((h) => low.includes(h.trim())) || low.length < 3;
@@ -389,7 +484,8 @@ function parseCsv(text: string): LabParseResult {
   const seenKeys = new Set<string>();
   for (const cells of body) {
     if (cells.length < 2) continue;
-    const name = cells[nameCol] ?? '';
+    // P7.1: strip trailing assay-method tokens before alias matching.
+    const name = stripTrailingMethodTokens(cells[nameCol] ?? '');
     if (!name) continue;
 
     // Value cell: the configured column, else the first cell that is numeric.
@@ -481,6 +577,7 @@ export function parseLabReportText(text: string): LabParseResult {
   const matches: LabParseMatch[] = [];
   const unmatched: LabUnmatchedLine[] = [];
   const seenKeys = new Set<string>();
+  const seenUnmatchedLines = new Set<string>(); // repeated header/footer blocks die at the first copy
 
   for (const rawLine of lines) {
     const line = rawLine.trim();
@@ -504,6 +601,8 @@ export function parseLabReportText(text: string): LabParseResult {
         line,
       });
     } else {
+      if (seenUnmatchedLines.has(line)) continue;
+      seenUnmatchedLines.add(line);
       unmatched.push({
         line,
         name: parsed.name,
