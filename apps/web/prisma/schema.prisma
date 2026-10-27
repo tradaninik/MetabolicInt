@@ -87,6 +87,7 @@ model User {
   labs             Lab[]
   recipes          Recipe[]
   labPanels        LabPanel[]
+  customLabTests   CustomLabTest[]
   reportDocuments  ReportDocument[]
   meds      Medication[]
   dayTags          DayContextTag[]
@@ -397,6 +398,25 @@ model ReportDocument {
   createdAt   DateTime @default(now())
 
   @@index([userId, category])
+}
+
+/// P7.1: user-defined lab tests created at import from unmatched report rows
+/// ("create custom test" - name + unit + value). LabResult.testKey references
+/// these as "custom:<id>"; deleting a definition is deferred (panels would
+/// lose their label) so this wave ships GET+POST only. Additive migration 0006.
+model CustomLabTest {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  name      String   // as the user named it (unique per user, case-insensitive, enforced in the route)
+  unit      String   @default("")  // display unit, may be empty
+  refLow    Float?
+  refHigh   Float?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, name])
+  @@index([userId])
 }
 
 /// Phase 2c: medications — adherence display only.

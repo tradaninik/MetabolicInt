@@ -16,6 +16,7 @@ import { canonicalA1cPercent } from '@/lib/clinical-db';
 import {
   LAB_TEST_MAP,
   LAB_CATEGORIES,
+  pickDefaultRange,
   labFlagFor,
   homaIr,
   nonHdl,
@@ -41,8 +42,15 @@ interface PanelRow {
   results: ResultRow[];
 }
 
-/** Attach catalog labels, computed derived markers, and the display-only
- * eGFR estimate (only when the panel has creatinine but no lab-printed eGFR). */
+/** A user-created custom test definition (P7.1), keyed for LabResult.testKey. */
+export interface CustomTestDef {
+  key: string; // "custom:<id>"
+  name: string;
+  unit: string;
+  refLow?: number | null;
+  refHigh?: number | null;
+}
+
 interface DecoratedResult {
   testKey: string;
   label: string;
@@ -56,7 +64,16 @@ interface DecoratedResult {
   derived: boolean;
 }
 
-function decoratePanel(p: PanelRow, profile: { age: number | null; gender: string | null }): {
+/** Attach catalog labels, computed derived markers, and the display-only
+ * eGFR estimate (only when the panel has creatinine but no lab-printed eGFR).
+ * P7.1: custom test rows label from the user's own definitions; the lab's
+ * printed range wins, else the sex-aware catalog default (never neutral when
+ * the patient's sex is on file). */
+function decoratePanel(
+  p: PanelRow,
+  profile: { age: number | null; gender: string | null },
+  customDefs: Record<string, CustomTestDef>,
+): {
   id: string;
   name: string | null;
   labName: string | null;
@@ -65,18 +82,21 @@ function decoratePanel(p: PanelRow, profile: { age: number | null; gender: strin
   results: DecoratedResult[];
 } {
   const byKey = new Map(p.results.map((r) => [r.testKey, r]));
+  const sex = profile.gender === 'male' || profile.gender === 'female' ? profile.gender : null;
   const out: DecoratedResult[] = p.results.map((r) => {
     const def = LAB_TEST_MAP[r.testKey];
+    const custom = customDefs[r.testKey];
+    const defaults = def ? pickDefaultRange(def, sex) : { refLow: custom?.refLow ?? undefined, refHigh: custom?.refHigh ?? undefined };
     return {
       testKey: r.testKey,
-      label: def?.label ?? r.testKey,
+      label: def?.label ?? custom?.name ?? r.testKey,
       category: def?.category ?? null,
-      unit: r.unit,
+      unit: r.unit || def?.unit || custom?.unit || '',
       value: r.value,
       // The lab's printed range wins; the catalog default fills in when absent.
-      refLow: r.refLow ?? def?.refLow ?? null,
-      refHigh: r.refHigh ?? def?.refHigh ?? null,
-      flag: r.flag ?? labFlagFor(r.value, r.refLow ?? def?.refLow, r.refHigh ?? def?.refHigh),
+      refLow: r.refLow ?? defaults.refLow ?? null,
+      refHigh: r.refHigh ?? defaults.refHigh ?? null,
+      flag: r.flag ?? labFlagFor(r.value, r.refLow ?? defaults.refLow, r.refHigh ?? defaults.refHigh),
       direction: def?.direction ?? 'context',
       derived: false,
     };
@@ -128,7 +148,7 @@ export async function GET() {
   const userId = await getSessionUserId();
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const [panels, user, allResults] = await Promise.all([
+  const [panels, user, allResults, customTests] = await Promise.all([
     prisma.labPanel.findMany({
       where: { userId },
       orderBy: [{ performedAt: 'desc' }, { createdAt: 'desc' }],
@@ -141,7 +161,22 @@ export async function GET() {
       orderBy: [{ performedAt: 'asc' }],
       select: { testKey: true, value: true, unit: true, performedAt: true },
     }),
+    prisma.customLabTest.findMany({
+      where: { userId },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true, unit: true, refLow: true, refHigh: true },
+    }),
   ]);
+
+  const customDefs: Record<string, CustomTestDef> = Object.fromEntries(
+    customTests.map((t) => [`custom:${t.id}`, {
+      key: `custom:${t.id}`,
+      name: t.name,
+      unit: t.unit,
+      refLow: t.refLow,
+      refHigh: t.refHigh,
+    }]),
+  );
 
   // Per-test trend series (>= 2 datapoints), catalog-labeled.
   const series = new Map<string, { date: string; value: number; unit: string }[]>();
@@ -153,8 +188,8 @@ export async function GET() {
     .filter(([, pts]) => pts.length >= 2)
     .map(([testKey, points]) => ({
       testKey,
-      label: LAB_TEST_MAP[testKey]?.label ?? testKey,
-      unit: LAB_TEST_MAP[testKey]?.unit ?? points[0].unit,
+      label: LAB_TEST_MAP[testKey]?.label ?? customDefs[testKey]?.name ?? testKey,
+      unit: LAB_TEST_MAP[testKey]?.unit ?? customDefs[testKey]?.unit ?? points[0].unit,
       direction: LAB_TEST_MAP[testKey]?.direction ?? 'context',
       points: points.map(({ date, value }) => ({ date, value })),
     }))
@@ -173,9 +208,15 @@ export async function GET() {
           })),
         },
         { age: user?.age ?? null, gender: user?.gender ?? null },
+        customDefs,
       ),
     ),
     trends,
+    customTests: Object.values(customDefs).map(({ refLow, refHigh, ...rest }) => ({
+      ...rest,
+      ...(refLow != null ? { refLow } : {}),
+      ...(refHigh != null ? { refHigh } : {}),
+    })),
   });
 }
 
@@ -186,8 +227,15 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   if (!body || typeof body !== 'object') return NextResponse.json({ error: 'Invalid body' }, { status: 400 });
 
+  // P7.1: the user's custom tests are valid testKeys alongside the catalog.
+  const customTests = await prisma.customLabTest.findMany({
+    where: { userId },
+    select: { id: true },
+  });
+
   const result = validateLabPanelInput(body as Parameters<typeof validateLabPanelInput>[0], {
     canonicalA1c: canonicalA1cPercent,
+    customKeys: customTests.map((t) => `custom:${t.id}`),
   });
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
 
