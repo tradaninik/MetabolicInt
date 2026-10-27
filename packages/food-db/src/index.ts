@@ -27,6 +27,13 @@ import { maharashtrian } from './data/maharashtrian';
 import { rajasthani } from './data/rajasthani';
 import { global } from './data/global';
 import { ingredientFoods, INGREDIENT_IDS, CATALOG_INGREDIENT_IDS } from './data/ingredients';
+import { catalogRecipes, CATALOG_RECIPE_TARGET } from './data/recipes';
+import type {
+  CatalogRecipeSeed,
+  CatalogMealType,
+  CatalogCuisine,
+  CatalogTag,
+} from './data/recipes/types';
 import { healingFoods } from './data/healing-foods';
 import { foodTastes } from './data/food-tastes';
 import { viruddhaTags, viruddhaTagNames } from './data/viruddha-tags';
@@ -49,6 +56,16 @@ export const FOODS: Food[] = [
 
 /** P7.1: re-exported for the recipe pipeline + ingredient search. */
 export { ingredientFoods, INGREDIENT_IDS, CATALOG_INGREDIENT_IDS };
+
+/** P8: the unified 300-recipe catalog (all six meal bands merged, invariants
+ * enforced at import time — see data/recipes/index.ts). */
+export { catalogRecipes, CATALOG_RECIPE_TARGET };
+export type { CatalogRecipeSeed, CatalogMealType, CatalogCuisine, CatalogTag };
+export {
+  CATALOG_MEAL_TYPES,
+  CATALOG_CUISINES,
+  CATALOG_TAGS,
+} from './data/recipes/types';
 
 /** Fast lookup by id. */
 export const FOOD_INDEX: Record<string, Food> = Object.fromEntries(
