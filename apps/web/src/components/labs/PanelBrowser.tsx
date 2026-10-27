@@ -54,13 +54,15 @@ type FieldState = Record<string, { value: string; unit: string; refLow: string; 
 export default function PanelBrowser({
   panels,
   trends,
+  customTests = [],
   onSaved,
 }: {
   panels: PanelView[];
   trends: TrendView[];
+  customTests?: { key: string; name: string; unit: string }[];
   onSaved: () => void;
 }) {
-  const [open, setOpen] = useState<LabCategoryLetter | null>('A');
+  const [open, setOpen] = useState<LabCategoryLetter | 'custom' | null>('A');
   const [date, setDate] = useState('');
   const [labName, setLabName] = useState('');
   const [panelName, setPanelName] = useState('');
@@ -94,12 +96,15 @@ export default function PanelBrowser({
     setError(null);
     setMsg(null);
     try {
+      const customByKey = new Map(customTests.map((t) => [t.key, t]));
       const results = Object.entries(fields)
         .filter(([, f]) => f.value.trim() !== '')
         .map(([testKey, f]) => ({
           testKey,
           value: Number(f.value),
           ...(f.unit && testKey === 'hba1c' ? { unit: f.unit } : {}),
+          // P7.1: custom tests carry their definition's unit (no catalog default exists).
+          ...(testKey.startsWith('custom:') && customByKey.get(testKey)?.unit ? { unit: customByKey.get(testKey)!.unit } : {}),
           ...(f.refLow.trim() !== '' ? { refLow: Number(f.refLow) } : {}),
           ...(f.refHigh.trim() !== '' ? { refHigh: Number(f.refHigh) } : {}),
         }));
@@ -126,6 +131,8 @@ export default function PanelBrowser({
       setSaving(false);
     }
   }
+
+  const isCustomOpen = open === 'custom';
 
   const input = 'w-full rounded-lg border border-neutral-300 bg-transparent px-2 py-1.5 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:border-neutral-700';
 
@@ -238,6 +245,53 @@ export default function PanelBrowser({
             );
           })}
         </div>
+
+        {/* P7.1: the user's own created tests, always at the bottom. */}
+        {customTests.length > 0 && (
+          <div className="rounded-xl border border-violet-200 dark:border-violet-900/60">
+            <button
+              type="button"
+              onClick={() => setOpen(isCustomOpen ? null : 'custom')}
+              aria-expanded={isCustomOpen}
+              className="flex min-h-[44px] w-full items-center justify-between gap-2 px-4 py-3 text-left"
+            >
+              <span>
+                <span className="text-sm font-semibold">
+                  <span className="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-full bg-violet-100 text-xs font-bold text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
+                    Y
+                  </span>
+                  Your custom tests
+                </span>
+                <span className="ml-2 text-xs text-neutral-400">created at import - name, unit and value are yours</span>
+              </span>
+              <span className="text-xs text-neutral-400" aria-hidden>{isCustomOpen ? '−' : '+'}</span>
+            </button>
+            {isCustomOpen && (
+              <div className="border-t border-neutral-100 px-4 py-3 dark:border-neutral-900">
+                <div className="mt-1.5 grid gap-2 sm:grid-cols-2">
+                  {customTests.map((t) => (
+                    <div key={t.key} className="flex items-center gap-2 rounded-lg border border-neutral-200 px-3 py-2 dark:border-neutral-800">
+                      <label className="min-w-0 flex-1 text-xs text-neutral-600 dark:text-neutral-400">
+                        {t.name}
+                        <input
+                          inputMode="decimal"
+                          value={fields[t.key]?.value ?? ''}
+                          onChange={(e) => setField(t.key, { value: e.target.value })}
+                          placeholder="value"
+                          className="mt-1 w-full rounded border border-neutral-300 bg-transparent px-2 py-1.5 text-sm dark:border-neutral-700"
+                        />
+                      </label>
+                      <span className="shrink-0 text-[11px] text-neutral-400">{t.unit}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-2 text-[11px] text-neutral-400">
+                  Created from an unmatched report row on the Import tab. Trends appear from the second value onwards.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
 
         {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
         <div className="mt-4 flex items-center gap-3">

@@ -35,8 +35,12 @@ export default function LabsPage() {
   const [trend, setTrend] = useState<TrendPoint[]>([]);
   const [panels, setPanels] = useState<PanelView[]>([]);
   const [trends, setTrends] = useState<TrendView[]>([]);
+  const [customTests, setCustomTests] = useState<{ key: string; name: string; unit: string }[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [tab, setTab] = useState<'panels' | 'import' | 'compare' | 'documents'>('panels');
+  // P7.1: after an import saves, the tab flips to Panels so the new panel is
+  // front and center - the old bug left the review screen feeling stuck.
+  const [savedToast, setSavedToast] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -51,6 +55,7 @@ export default function LabsPage() {
       if (r2) {
         setPanels(r2.panels ?? []);
         setTrends(r2.trends ?? []);
+        setCustomTests(r2.customTests ?? []);
       }
     } catch {
       // offline-tolerant: keep whatever we already have
@@ -63,6 +68,13 @@ export default function LabsPage() {
     istNow(); // import keeps the IST convention pinned on this page
     load();
   }, [load]);
+
+  // The import-saved toast self-dismisses.
+  useEffect(() => {
+    if (!savedToast) return;
+    const t = setTimeout(() => setSavedToast(null), 6000);
+    return () => clearTimeout(t);
+  }, [savedToast]);
 
   const latest = trend.at(-1);
   const prev = trend.length >= 2 ? trend[trend.length - 2] : null;
@@ -199,6 +211,11 @@ export default function LabsPage() {
         )}
 
         {/* ---------- A–E panels: entry, history, trends + import + compare + vault ---------- */}
+        {savedToast && (
+          <p role="status" className="mt-6 rounded-lg border border-brand-300 bg-brand-50 p-3 text-sm text-brand-800 dark:border-brand-800 dark:bg-brand-950/40 dark:text-brand-200">
+            {savedToast}
+          </p>
+        )}
         <div className="mt-8 flex flex-wrap gap-2" role="tablist" aria-label="Labs sections">
           <button role="tab" aria-selected={tab === 'panels'} onClick={() => setTab('panels')} className={segBtn(tab === 'panels')}>
             Panels &amp; trends
@@ -214,8 +231,16 @@ export default function LabsPage() {
           </button>
         </div>
 
-        {tab === 'panels' && <PanelBrowser panels={panels} trends={trends} onSaved={load} />}
-        {tab === 'import' && <ImportReport onSaved={load} />}
+        {tab === 'panels' && <PanelBrowser panels={panels} trends={trends} customTests={customTests} onSaved={load} />}
+        {tab === 'import' && (
+          <ImportReport
+            onSaved={() => {
+              setTab('panels');
+              setSavedToast('Panel saved from your report - it is at the top of Panel history below.');
+              load();
+            }}
+          />
+        )}
         {tab === 'compare' && <ComparePanels panels={panels} />}
         {tab === 'documents' && <DocumentsVault />}
       </div>

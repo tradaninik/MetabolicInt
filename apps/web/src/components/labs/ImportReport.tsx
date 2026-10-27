@@ -7,8 +7,17 @@
 // engine parser, no OCR, no AI) -> REVIEW screen with every field editable
 // and unmatched lines offered for manual mapping (never silent) -> Save
 // creates one LabPanel via /api/lab-panels.
-import { useRef, useState } from 'react';
-import { LAB_TESTS, LAB_TEST_MAP, type LabTestDef } from '@mi/engine';
+//
+// P7.1 fixes baked in:
+//   * auto-suggested mappings never collide with an already-matched test (the
+//     old "HEMOGLOBIN row suggests hba1c, save 400s twice, panel never closes"
+//     bug), and the mapping select only offers keys not already in use;
+//   * unmatched rows can become CUSTOM tests (name + unit + value) that stay
+//     tracked on /labs afterwards;
+//   * optional patient age/sex at import pre-fills sex-aware display-only
+//     default ranges for rows the report printed no range for.
+import { useEffect, useRef, useState } from 'react';
+import { LAB_TESTS, LAB_TEST_MAP, pickDefaultRange, type LabTestDef } from '@mi/engine';
 import { istNow } from '@/lib/clinical-db';
 
 export interface ParseMatch {
@@ -36,6 +45,8 @@ export interface ParseResult {
   unmatched: ParseUnmatched[];
   performedAt?: string;
   labName?: string;
+  patientAge?: number;
+  patientSex?: 'male' | 'female';
   format: 'text' | 'csv' | 'pdf';
   /** present when a PDF was uploaded server-side (what was actually read) */
   text?: string;
@@ -49,6 +60,30 @@ interface ReviewRow {
   refLow: string;
   refHigh: string;
   confidence: number;
+  /** the report printed a range for this row - defaults never overwrite it */
+  hasPrintedRange: boolean;
+  /** the user typed in a ref cell - sex changes never overwrite it */
+  refEdited: boolean;
+}
+
+interface ManualRow {
+  line: string;
+  name: string;
+  value: string;
+  unit: string;
+  testKey: string; // '' = leave out; 'custom:<id>' = a created custom test
+  /** inline "create custom test" form */
+  creating: boolean;
+  customName: string;
+  customUnit: string;
+  creatingError: string | null;
+  creatingBusy: boolean;
+}
+
+interface CustomTestOption {
+  key: string;
+  name: string;
+  unit: string;
 }
 
 export default function ImportReport({ onSaved }: { onSaved: () => void }) {
@@ -56,42 +91,90 @@ export default function ImportReport({ onSaved }: { onSaved: () => void }) {
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [review, setReview] = useState<ReviewRow[] | null>(null);
-  const [manual, setManual] = useState<{ line: string; name: string; value: string; testKey: string }[]>([]);
+  const [manual, setManual] = useState<ManualRow[]>([]);
   const [date, setDate] = useState('');
   const [labName, setLabName] = useState('');
   const [panelName, setPanelName] = useState('');
   const [parsedMeta, setParsedMeta] = useState<ParseResult | null>(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [age, setAge] = useState('');
+  const [sex, setSex] = useState<'' | 'male' | 'female'>('');
+  const [customTests, setCustomTests] = useState<CustomTestOption[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // The user's custom tests are mapping targets for unmatched rows too.
+  useEffect(() => {
+    fetch('/api/lab-tests')
+      .then((r) => (r.ok ? r.json() : { tests: [] }))
+      .then((j) => setCustomTests(j.tests ?? []))
+      .catch(() => {});
+  }, []);
+
+  /** Sex-aware default range strings for a catalog test ('' when none). */
+  function defaultRangeStrings(def: LabTestDef | undefined, sexNow: '' | 'male' | 'female') {
+    if (!def) return { refLow: '', refHigh: '' };
+    const d = pickDefaultRange(def, sexNow || null);
+    return {
+      refLow: d.refLow != null ? String(d.refLow) : '',
+      refHigh: d.refHigh != null ? String(d.refHigh) : '',
+    };
+  }
+
   /** Populate the review screen from a parse result (shared by the paste
-   * and the PDF-upload paths). */
+   * and the PDF-upload paths). P7.1: suggested keys never collide with a
+   * matched test or another suggestion, so Save can never produce a
+   * duplicate testKey (the "panel doesn't close" bug). */
   function applyParsed(parsed: ParseResult) {
     if (parsed.matches.length === 0 && parsed.unmatched.length === 0) {
       throw new Error('No test rows recognized. Check that this is the results section of the report and try again.');
     }
     setParsedMeta(parsed);
+    const sexNow: '' | 'male' | 'female' = parsed.patientSex ?? '';
+    setSex(sexNow);
+    setAge(parsed.patientAge != null ? String(parsed.patientAge) : '');
     setReview(
-      parsed.matches.map((m) => ({
-        testKey: m.testKey,
-        asPrinted: m.asPrinted,
-        value: String(m.value),
-        unit: m.unit,
-        refLow: m.refLow != null ? String(m.refLow) : '',
-        refHigh: m.refHigh != null ? String(m.refHigh) : '',
-        confidence: m.confidence,
-      })),
+      parsed.matches.map((m) => {
+        const hasPrintedRange = m.refLow != null || m.refHigh != null;
+        const defaults = defaultRangeStrings(LAB_TEST_MAP[m.testKey], sexNow);
+        return {
+          testKey: m.testKey,
+          asPrinted: m.asPrinted,
+          value: String(m.value),
+          unit: m.unit,
+          refLow: m.refLow != null ? String(m.refLow) : defaults.refLow,
+          refHigh: m.refHigh != null ? String(m.refHigh) : defaults.refHigh,
+          confidence: m.confidence,
+          hasPrintedRange,
+          refEdited: false,
+        };
+      }),
     );
+    const usedByReview = new Set(parsed.matches.map((m) => m.testKey));
+    const claimed = new Set<string>();
     setManual(
       parsed.unmatched
         .filter((u) => u.value != null)
-        .map((u) => ({
-          line: u.line,
-          name: u.name,
-          value: String(u.value),
-          testKey: u.suggestions[0] ?? '',
-        })),
+        .map((u) => {
+          // First suggestion that is neither matched above nor claimed by
+          // another row - the auto-pick can never create a duplicate key.
+          const suggestion = u.suggestions.find(
+            (s) => !usedByReview.has(s) && !claimed.has(s) && !s.startsWith('custom:'),
+          );
+          if (suggestion) claimed.add(suggestion);
+          return {
+            line: u.line,
+            name: u.name,
+            value: String(u.value),
+            unit: u.unit,
+            testKey: suggestion ?? '',
+            creating: false,
+            customName: u.name.replace(/[^A-Za-z0-9 ()/.-]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60),
+            customUnit: u.unit,
+            creatingError: null,
+            creatingBusy: false,
+          };
+        }),
     );
     setDate(parsed.performedAt ?? istNow().slice(0, 10));
     setLabName(parsed.labName ?? '');
@@ -157,7 +240,62 @@ export default function ImportReport({ onSaved }: { onSaved: () => void }) {
   }
 
   function updateRow(i: number, patch: Partial<ReviewRow>) {
-    setReview((rows) => (rows ?? []).map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+    setReview((rows) =>
+      (rows ?? []).map((r, idx) =>
+        idx === i
+          ? {
+              ...r,
+              ...patch,
+              ...(patch.refLow != null || patch.refHigh != null ? { refEdited: true } : {}),
+            }
+          : r,
+      ),
+    );
+  }
+
+  /** P7.1: changing the patient sex re-picks display-only defaults for rows
+   * whose range the report did not print and the user has not typed over. */
+  function changeSex(next: '' | 'male' | 'female') {
+    setSex(next);
+    setReview((rows) =>
+      (rows ?? []).map((r) => {
+        if (r.hasPrintedRange || r.refEdited) return r;
+        const d = defaultRangeStrings(LAB_TEST_MAP[r.testKey], next);
+        return { ...r, refLow: d.refLow, refHigh: d.refHigh };
+      }),
+    );
+  }
+
+  /** P7.1: create a custom test for an unmatched row (name + unit). */
+  async function createCustomTest(i: number) {
+    setManual((rows) =>
+      rows.map((x, idx) => (idx === i ? { ...x, creatingBusy: true, creatingError: null } : x)),
+    );
+    const row = manual[i];
+    try {
+      const res = await fetch('/api/lab-tests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: row.customName.trim(), unit: row.customUnit.trim() }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error ?? 'Could not create that test.');
+      const created = j as { key: string; name: string; unit: string };
+      setCustomTests((prev) => [...prev.filter((t) => t.key !== created.key), { key: created.key, name: created.name, unit: created.unit }]);
+      setManual((rows) =>
+        rows.map((x, idx) =>
+          idx === i ? { ...x, testKey: created.key, creating: false, creatingBusy: false, creatingError: null } : x,
+        ),
+      );
+    } catch (e) {
+      setManual((rows) =>
+        rows.map((x, idx) =>
+          idx === i
+            ? { ...x, creatingBusy: false, creatingError: e instanceof Error ? e.message : 'Could not create that test.' }
+            : x,
+        ),
+      );
+    }
   }
 
   async function save() {
@@ -166,19 +304,29 @@ export default function ImportReport({ onSaved }: { onSaved: () => void }) {
     setError(null);
     setMsg(null);
     try {
-      const results = [
-        ...review
-          .filter((r) => r.testKey && r.value.trim() !== '' && Number.isFinite(Number(r.value)))
-          .map((r) => ({
-            testKey: r.testKey,
-            value: Number(r.value),
-            ...(r.refLow.trim() !== '' ? { refLow: Number(r.refLow) } : {}),
-            ...(r.refHigh.trim() !== '' ? { refHigh: Number(r.refHigh) } : {}),
-          })),
-        ...manual
-          .filter((m) => m.testKey && m.value.trim() !== '' && Number.isFinite(Number(m.value)))
-          .map((m) => ({ testKey: m.testKey, value: Number(m.value) })),
-      ];
+      const reviewResults = review
+        .filter((r) => r.testKey && r.value.trim() !== '' && Number.isFinite(Number(r.value)))
+        .map((r) => ({
+          testKey: r.testKey,
+          value: Number(r.value),
+          ...(r.refLow.trim() !== '' ? { refLow: Number(r.refLow) } : {}),
+          ...(r.refHigh.trim() !== '' ? { refHigh: Number(r.refHigh) } : {}),
+        }));
+      const used = new Set(reviewResults.map((r) => r.testKey));
+      const manualResults = manual
+        .filter(
+          (m) =>
+            m.testKey &&
+            !used.has(m.testKey) && // belt & braces: a collision can no longer be built
+            m.value.trim() !== '' &&
+            Number.isFinite(Number(m.value)),
+        )
+        .map((m) => ({
+          testKey: m.testKey,
+          value: Number(m.value),
+          ...(m.testKey.startsWith('custom:') && m.unit ? { unit: m.unit } : {}),
+        }));
+      const results = [...reviewResults, ...manualResults];
       const res = await fetch('/api/lab-panels', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -197,6 +345,8 @@ export default function ImportReport({ onSaved }: { onSaved: () => void }) {
       setManual([]);
       setText('');
       setParsedMeta(null);
+      setAge('');
+      setSex('');
       if (fileRef.current) fileRef.current.value = '';
       onSaved();
     } catch (e) {
@@ -209,6 +359,9 @@ export default function ImportReport({ onSaved }: { onSaved: () => void }) {
   const input = 'w-full rounded-lg border border-neutral-300 bg-transparent px-2 py-1.5 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:border-neutral-700';
   const cellInput = 'w-full rounded border border-neutral-300 bg-transparent px-2 py-1 text-sm dark:border-neutral-700';
   const usedKeys = new Set((review ?? []).map((r) => r.testKey));
+  const manualChosen = new Set(manual.map((m) => m.testKey).filter(Boolean));
+  const mappable = (t: { key: string }) => !usedKeys.has(t.key) && !manualChosen.has(t.key);
+  const customOptionByKey = new Map(customTests.map((t) => [t.key, t]));
 
   return (
     <div>
@@ -269,7 +422,7 @@ export default function ImportReport({ onSaved }: { onSaved: () => void }) {
         {/* ---------- Review screen ---------- */}
         {review && (
           <div className="mt-4">
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
               <label className="text-xs text-neutral-500">
                 Test date {parsedMeta?.performedAt && <span className="text-neutral-400">(from report)</span>}
                 <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={input} />
@@ -282,7 +435,29 @@ export default function ImportReport({ onSaved }: { onSaved: () => void }) {
                 Panel name (optional)
                 <input value={panelName} onChange={(e) => setPanelName(e.target.value)} placeholder="e.g. Quarterly check" className={input} />
               </label>
+              <label className="text-xs text-neutral-500">
+                Patient age {parsedMeta?.patientAge != null && <span className="text-neutral-400">(from report)</span>}
+                <input
+                  inputMode="numeric"
+                  value={age}
+                  onChange={(e) => setAge(e.target.value.replace(/[^0-9]/g, '').slice(0, 3))}
+                  placeholder="optional"
+                  className={input}
+                />
+              </label>
+              <label className="text-xs text-neutral-500">
+                Patient sex {parsedMeta?.patientSex && <span className="text-neutral-400">(from report)</span>}
+                <select value={sex} onChange={(e) => changeSex(e.target.value as '' | 'male' | 'female')} className={input} aria-label="patient sex">
+                  <option value="">not set</option>
+                  <option value="male">male</option>
+                  <option value="female">female</option>
+                </select>
+              </label>
             </div>
+            <p className="mt-2 text-[11px] text-neutral-400">
+              Age and sex only pick display-only default ranges for rows the report printed no range for - the lab&apos;s
+              own printed range always wins. They are not stored as profile facts.
+            </p>
 
             <p className="mt-4 text-xs font-medium text-neutral-500">
               Review the pre-filled fields ({review.length} recognized) - everything is editable:
@@ -316,8 +491,13 @@ export default function ImportReport({ onSaved }: { onSaved: () => void }) {
                         </td>
                         <td className="px-3 py-2"><input inputMode="decimal" value={r.value} onChange={(e) => updateRow(i, { value: e.target.value })} className={cellInput} /></td>
                         <td className="px-3 py-2 text-xs text-neutral-400">{r.unit || def?.unit || ''}</td>
-                        <td className="px-3 py-2"><input inputMode="decimal" value={r.refLow} onChange={(e) => updateRow(i, { refLow: e.target.value })} className={cellInput} /></td>
-                        <td className="px-3 py-2"><input inputMode="decimal" value={r.refHigh} onChange={(e) => updateRow(i, { refHigh: e.target.value })} className={cellInput} /></td>
+                        <td className="px-3 py-2">
+                          <input inputMode="decimal" value={r.refLow} onChange={(e) => updateRow(i, { refLow: e.target.value })} className={cellInput} aria-label="reference low" />
+                          {!r.hasPrintedRange && !r.refEdited && <span className="text-[10px] text-neutral-300">default</span>}
+                        </td>
+                        <td className="px-3 py-2">
+                          <input inputMode="decimal" value={r.refHigh} onChange={(e) => updateRow(i, { refHigh: e.target.value })} className={cellInput} aria-label="reference high" />
+                        </td>
                         <td className="px-3 py-2">
                           <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                             r.confidence >= 1
@@ -346,28 +526,95 @@ export default function ImportReport({ onSaved }: { onSaved: () => void }) {
             {manual.length > 0 && (
               <div className="mt-4">
                 <p className="text-xs font-medium text-neutral-500">
-                  Not recognized ({manual.length}) - map them yourself or leave them out (never silently dropped):
+                  Not recognized ({manual.length}) - map them, create a custom test, or leave them out (never silently dropped):
                 </p>
                 <ul className="mt-2 space-y-2">
-                  {manual.map((m, i) => (
-                    <li key={i} className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-neutral-300 p-2 text-sm dark:border-neutral-700">
-                      <span className="min-w-0 flex-1 truncate" title={m.line}>
-                        <span className="font-medium">{m.name}</span>
-                        <span className="ml-2 text-xs text-neutral-400 tabular-nums">{m.value}</span>
-                      </span>
-                      <select
-                        value={m.testKey}
-                        onChange={(e) => setManual((rows) => rows.map((x, idx) => (idx === i ? { ...x, testKey: e.target.value } : x)))}
-                        className="rounded border border-neutral-300 bg-transparent px-2 py-1 text-xs dark:border-neutral-700"
-                        aria-label={`map ${m.name}`}
-                      >
-                        <option value="">- leave out -</option>
-                        {LAB_TESTS.filter((t) => !t.documentOnly && !usedKeys.has(t.key)).map((t) => (
-                          <option key={t.key} value={t.key}>{t.label}</option>
-                        ))}
-                      </select>
-                    </li>
-                  ))}
+                  {manual.map((m, i) => {
+                    const isCustom = m.testKey.startsWith('custom:');
+                    const customDef = isCustom ? customOptionByKey.get(m.testKey) : undefined;
+                    return (
+                      <li key={i} className="rounded-lg border border-dashed border-neutral-300 p-2 text-sm dark:border-neutral-700">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="min-w-0 flex-1 truncate" title={m.line}>
+                            <span className="font-medium">{m.name}</span>
+                            <span className="ml-2 text-xs text-neutral-400 tabular-nums">{m.value} {m.unit}</span>
+                          </span>
+                          {isCustom ? (
+                            <span className="flex items-center gap-2">
+                              <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
+                                custom: {customDef?.name ?? 'your test'}
+                              </span>
+                              <button
+                                onClick={() => setManual((rows) => rows.map((x, idx) => (idx === i ? { ...x, testKey: '' } : x)))}
+                                className="text-xs text-neutral-400 hover:text-red-500"
+                              >
+                                leave out
+                              </button>
+                            </span>
+                          ) : (
+                            <>
+                              <select
+                                value={m.testKey}
+                                onChange={(e) => setManual((rows) => rows.map((x, idx) => (idx === i ? { ...x, testKey: e.target.value, creating: false, creatingError: null } : x)))}
+                                className="rounded border border-neutral-300 bg-transparent px-2 py-1 text-xs dark:border-neutral-700"
+                                aria-label={`map ${m.name}`}
+                              >
+                                <option value="">- leave out -</option>
+                                {customTests.filter(mappable).map((t) => (
+                                  <option key={t.key} value={t.key}>{t.name} (yours)</option>
+                                ))}
+                                {LAB_TESTS.filter((t) => !t.documentOnly && mappable(t)).map((t) => (
+                                  <option key={t.key} value={t.key}>{t.label}</option>
+                                ))}
+                              </select>
+                              <button
+                                onClick={() => setManual((rows) => rows.map((x, idx) => (idx === i ? { ...x, creating: !x.creating, creatingError: null } : x)))}
+                                className="rounded-lg border border-brand-300 px-2 py-1 text-[11px] font-medium text-brand-700 hover:bg-brand-50 dark:border-brand-800 dark:text-brand-300 dark:hover:bg-brand-950/40"
+                              >
+                                + Create custom test
+                              </button>
+                            </>
+                          )}
+                        </div>
+                        {m.creating && !isCustom && (
+                          <div className="mt-2 flex flex-wrap items-end gap-2 rounded-lg bg-neutral-50 p-2 dark:bg-neutral-900/40">
+                            <label className="text-xs text-neutral-500">
+                              Test name
+                              <input
+                                value={m.customName}
+                                onChange={(e) => setManual((rows) => rows.map((x, idx) => (idx === i ? { ...x, customName: e.target.value } : x)))}
+                                className={`${cellInput} w-44`}
+                                maxLength={60}
+                                aria-label="custom test name"
+                              />
+                            </label>
+                            <label className="text-xs text-neutral-500">
+                              Unit
+                              <input
+                                value={m.customUnit}
+                                onChange={(e) => setManual((rows) => rows.map((x, idx) => (idx === i ? { ...x, customUnit: e.target.value } : x)))}
+                                className={`${cellInput} w-24`}
+                                maxLength={16}
+                                placeholder="e.g. mg/dL"
+                                aria-label="custom test unit"
+                              />
+                            </label>
+                            <span className="text-xs text-neutral-400">
+                              value {m.value} - saved with the panel and tracked on Labs afterwards
+                            </span>
+                            <button
+                              onClick={() => createCustomTest(i)}
+                              disabled={m.creatingBusy || m.customName.trim().length < 2}
+                              className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700 disabled:opacity-60"
+                            >
+                              {m.creatingBusy ? 'Creating...' : 'Create test'}
+                            </button>
+                            {m.creatingError && <span className="w-full text-xs text-red-600">{m.creatingError}</span>}
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             )}

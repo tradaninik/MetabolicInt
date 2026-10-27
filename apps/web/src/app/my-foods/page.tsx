@@ -433,13 +433,14 @@ function RecipeEditor({
   const [results, setResults] = useState<Food[]>([]);
   const [saving, setSaving] = useState(false);
 
-  // Debounced ingredient search (same endpoint as /log).
+  // Debounced ingredient search (P7.1: /api/foods?ingredients=1 - raw
+  // building blocks only, never cooked dishes like dosa or biryani).
   useEffect(() => {
     const q = query.trim();
     if (!q) { setResults([]); return; }
     const t = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/foods?q=${encodeURIComponent(q)}`);
+        const res = await fetch(`/api/foods?q=${encodeURIComponent(q)}&ingredients=1`);
         if (res.ok) {
           const j = await res.json();
           setResults((j.foods ?? []).slice(0, 6));
@@ -492,7 +493,7 @@ function RecipeEditor({
   return (
     <div className="mt-4 rounded-2xl border border-neutral-200 p-4 dark:border-neutral-800">
       <h2 className="text-lg font-semibold">{initial ? `Edit "${initial.name}"` : 'New recipe'}</h2>
-      <p className="mt-1 text-xs text-neutral-500">Pick ingredients (catalog or your own foods), set portions, and name how many servings the whole recipe makes.</p>
+      <p className="mt-1 text-xs text-neutral-500">Pick raw ingredients (catalog staples or your own foods), set portions, and name how many servings the whole recipe makes. Cooked dishes are excluded - a recipe is built from what goes into the pan.</p>
 
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <label className="text-xs text-neutral-500">
@@ -510,7 +511,7 @@ function RecipeEditor({
           className={input}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search foods to add as ingredients - dosa, dal, paneer..."
+          placeholder="Search raw ingredients - rice, toor dal, onion, paneer..."
           aria-label="search ingredients"
         />
         {results.length > 0 && (
