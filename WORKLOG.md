@@ -2,6 +2,15 @@
 
 ---
 
+## 2026-10-29 - Session 2, D-batch-2: semver-safe transitive fixes (18 -> 8 advisories)
+
+Mission D batch 2: plain `npm audit fix` (NO --force - semver-safe only). 16 transitive packages changed (browserslist, brace-expansion, js-yaml, nanoid, postcss chain, sharp, source-map-js, baseline-browser-mapping, uuid et al.); ZERO package.json manifest changes (lockfile-only). Prisma client regenerated post-install.
+
+- Result: 18 advisories -> 8 remaining. Every remaining fix requires a MAJOR bump, out of scope by the semver rule: next@16.4.3 chain (next moderate + postcss high - also blocked this session by the no-Prisma-8 / Turso-flow caution and the Next 15 App Router investment) and vitest@5.0.5 chain (vitest/vite/vite-node/tinypool/esbuild/@vitest/mocker - written proposal delivered as MISSION-D-dependency-report.md).
+- Gates: 619 passed + 3 skipped · tsc ×3 silent · lint 0/0 · build "Compiled successfully".
+
+---
+
 ## 2026-10-29 - Session 2, D-batch-1: critical runtime fixes - next 15.5.28 + next-auth 4.24.15
 
 Mission D (semver-only, small batches, NO --force). Batch 1 = the two CRITICAL runtime advisories, both semver-safe: next 15.5.19 -> 15.5.28 and next-auth 4.24.14 -> 4.24.15 (+ eslint-config-next aligned to 15.5.28; 7 packages changed). Prisma client regenerated after the install. No other dependency touched.
