@@ -10,6 +10,8 @@ import {
   priorSensitivity,
   macrosForGrams,
   netCarbsG,
+  attributeDeviation,
+  type AttributionResult,
   mealSlotForHour,
   medsToday,
   sleepContext,
@@ -133,6 +135,8 @@ export interface DashboardData {
   timeline: { t: number; label: string; type: 'meal' | 'glucose' | 'sleep' | 'activity' | 'weight'; value?: number; text?: string }[];
   /** glucose chart data (revamp item 3): today + events + forecast, week, 14d */
   glucoseChart: GlucoseChartData;
+  /** "Why was it high?" attribution (revamp item 4) */
+  attribution: AttributionResult;
   weightSeries: { t: number; kg: number }[];
   insights: ReturnType<typeof discoverInsights>;
   forecast: ReturnType<typeof forecast>;
@@ -259,10 +263,13 @@ export async function loadDashboardData(userId: string): Promise<DashboardData |
   const timeline = buildTimeline(user, since, foodIndex);
   // --- Dashboard revamp item 2: six metric cards --------------------------
   // Every "usual" below is the user's OWN history (patterns.ts), never a
-  // population reference, and every card carries its evidence count.
+  // population reference, and every card carries its evidence count. The
+  // IST calendar day (audience timezone, same convention as /api/meds/log)
+  // is the single "today" used by the cards, the chart and the attribution.
   const readingsAll = user.glucoseReadings.map((g) => ({ value: g.value, takenAt: g.takenAt.getTime() }));
   const latestG = user.glucoseReadings[0];
   const nowMs = Date.now();
+  const istDay = istDayBounds(nowMs);
   const usual = latestG
     ? usualPatternAt(readingsAll, latestG.takenAt.getTime(), { now: nowMs })
     : { median: null, n: 0, spread: null, windowHours: 1, days: 14 };
@@ -274,7 +281,7 @@ export async function loadDashboardData(userId: string): Promise<DashboardData |
   let afterMeal: MetricCards['glucose']['afterMeal'] = null;
   if (latestG) {
     const priorMeals = user.foodEntries
-      .filter((m) => m.loggedAt < latestG.takenAt && m.loggedAt >= startOfToday)
+      .filter((m) => m.loggedAt.getTime() < latestG.takenAt.getTime() && m.loggedAt.getTime() >= istDay.start)
       .sort((a, b) => b.loggedAt.getTime() - a.loggedAt.getTime());
     const m = priorMeals[0];
     if (m) {
@@ -343,7 +350,6 @@ export async function loadDashboardData(userId: string): Promise<DashboardData |
   // --- Dashboard revamp item 3: glucose chart (today + events + forecast) --
   // The Today view is anchored to the IST calendar day (the app's audience
   // timezone and the same convention /api/meds/log uses for slot times).
-  const istDay = istDayBounds(nowMs);
   const todayReadings = readingsAll
     .filter((r) => r.takenAt >= istDay.start && r.takenAt < istDay.end)
     .map((r) => {
@@ -424,6 +430,56 @@ export async function loadDashboardData(userId: string): Promise<DashboardData |
     week: readingsAll.filter((r) => r.takenAt >= nowMs - 7 * DAY).map((r) => ({ t: r.takenAt, value: r.value })),
     fortnight: readingsAll.filter((r) => r.takenAt >= nowMs - 14 * DAY).map((r) => ({ t: r.takenAt, value: r.value })),
   };
+
+  // --- Dashboard revamp item 4: "Why was it high?" -------------------------
+  // Pure engine call (attribution.ts): candidate factors around the latest
+  // reading, each labelled observed pattern / possible contributor /
+  // insufficient data. Association only - the engine never claims causation.
+  const latestGl = metricCards.glucose.latest;
+  const mealsBeforeReading: { takenAt: number; carbsG: number; name: string }[] = [];
+  let comparableMealCarbs: number[] = [];
+  if (latestGl) {
+    const todaysMealsBefore = user.foodEntries
+      .filter((m) => m.loggedAt.getTime() < latestGl.takenAt && m.loggedAt.getTime() >= istDay.start)
+      .sort((a, b) => a.loggedAt.getTime() - b.loggedAt.getTime());
+    for (const m of todaysMealsBefore) {
+      mealsBeforeReading.push({
+        takenAt: m.loggedAt.getTime(),
+        carbsG: m.carbsG,
+        name: foodIndex[m.foodId]?.name ?? m.foodId,
+      });
+    }
+    const lastMeal = todaysMealsBefore.at(-1);
+    if (lastMeal) {
+      const slot = mealSlotForHour(istHour(lastMeal.loggedAt.getTime()));
+      comparableMealCarbs = user.foodEntries
+        .filter((m) => {
+          const t = m.loggedAt.getTime();
+          return t < istDay.start && t >= nowMs - 30 * DAY && mealSlotForHour(istHour(t)) === slot;
+        })
+        .map((m) => m.carbsG);
+    }
+  }
+  const medSlotsBeforeReading = latestGl
+    ? metricCards.meds.slots
+        .filter((s) => istSlotEpoch(istDay.dateStr, s.slotTime) < latestGl.takenAt)
+        .map((s) => ({ name: s.name, slotTime: s.slotTime, status: s.status }))
+    : [];
+  const attribution = latestGl
+    ? attributeDeviation({
+        reading: { value: latestGl.value, takenAt: latestGl.takenAt },
+        usual: { median: metricCards.glucose.usual.median, n: metricCards.glucose.usual.n },
+        deviation: metricCards.glucose.deviation,
+        mealsBefore: mealsBeforeReading,
+        comparableMealCarbs,
+        medSlotsBefore: medSlotsBeforeReading,
+        steps: { today: metricCards.steps.today, usualAvg: metricCards.steps.usualAvg },
+        sleep: { lastNight: metricCards.sleep.lastHours, usualAvg: metricCards.sleep.usualAvg },
+        contextNotes: user.dayTags
+          .filter((t) => t.tagDate === istDay.dateStr)
+          .map((t) => ({ tag: t.tag, note: t.note ?? undefined })),
+      })
+    : { triggered: false, rows: [], totalEvidence: 0 };
   const weightSeries = user.weightEntries
     .map((w) => ({ t: w.takenAt.getTime(), kg: w.kg }))
     .sort((a, b) => a.t - b.t);
@@ -471,6 +527,7 @@ export async function loadDashboardData(userId: string): Promise<DashboardData |
     dailySummary: daily,
     timeline,
     glucoseChart,
+    attribution,
     weightSeries,
     insights,
     forecast: fc,

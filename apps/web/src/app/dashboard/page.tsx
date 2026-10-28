@@ -8,7 +8,8 @@ import AppShell from '@/components/AppShell';
 import HealthScoreRing from '@/components/dashboard/HealthScoreRing';
 import MetricCardsRow from '@/components/dashboard/MetricCards';
 import GlucoseTodayChart from '@/components/dashboard/GlucoseTodayChart';
-import { GlucoseChart, WeightChart, ForecastChart } from '@/components/dashboard/Charts';
+import WhyHighCard from '@/components/dashboard/WhyHighCard';
+import { WeightForecastChart } from '@/components/dashboard/Charts';
 import { REGION_LABELS } from '@mi/food-db';
 import { getPendingCheckIns } from '@/lib/pairing';
 import CheckInCard from '@/components/CheckInCard';
@@ -74,14 +75,12 @@ export default async function DashboardPage() {
             user's own history, every card carries its source/updated stamp. */}
         <MetricCardsRow cards={metricCards} now={Date.now()} />
 
-        {/* Charts row: glucose chart (revamp item 3) + weight trend */}
+        {/* Charts row: glucose chart + "Why was it high?" (revamp items 3-4) */}
         <div className="mt-4 grid gap-4 lg:grid-cols-3">
           <div className="lg:col-span-2">
             <GlucoseTodayChart chart={data.glucoseChart} />
           </div>
-          <Card title="Weight trend" subtitle={`${latestWeight.toFixed(1)} kg`}>
-            <WeightChart data={data.weightSeries} />
-          </Card>
+          <WhyHighCard attribution={data.attribution} glucose={metricCards.glucose} />
         </div>
 
         {/* Score + forecast + insights (score moved beside them by the v1 layout) */}
@@ -100,10 +99,17 @@ export default async function DashboardPage() {
             </div>
           </Card>
 
-          <Card title="30-day weight forecast" subtitle="With confidence interval · educational">
-            <ForecastChart data={forecastWeight} />
+          <Card
+            title="Weight & forecast"
+            subtitle={
+              metricCards.weight.delta30d !== null
+                ? `${latestWeight.toFixed(1)} kg · ${metricCards.weight.delta30d > 0 ? '+' : '−'}${Math.abs(metricCards.weight.delta30d).toFixed(1)} kg over 30 days`
+                : `${latestWeight.toFixed(1)} kg`
+            }
+          >
+            <WeightForecastChart history={data.weightSeries} forecast={forecastWeight} now={Date.now()} />
             <p className="mt-2 text-xs text-neutral-500">
-              Based on your recent energy balance. Shaded band = model uncertainty.
+              Measured history + 30-day model projection. Shaded band = model uncertainty.
             </p>
           </Card>
 
