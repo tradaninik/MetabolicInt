@@ -491,6 +491,19 @@ function CatalogCard({
 }) {
   return (
     <li className="flex flex-col rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-950">
+      {/* Category image: honest category-level art (not a dish photo), shared
+          by every recipe of this meal x cuisine combo; lazy + fixed 16:10. */}
+      <div className="mb-3 overflow-hidden rounded-xl border border-neutral-200 dark:border-neutral-800">
+        <img
+          src={`/images/catalog/cat-${r.mealType}-${r.cuisine}.webp`}
+          alt={`${CUISINE_LABELS[r.cuisine]} ${MEAL_CARD_LABELS[r.mealType]} category card`}
+          width={480}
+          height={300}
+          loading="lazy"
+          decoding="async"
+          className="aspect-[16/10] w-full object-cover"
+        />
+      </div>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <h3 className="text-sm font-semibold leading-snug">{r.name}</h3>
