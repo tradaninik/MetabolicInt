@@ -40,6 +40,19 @@ docs/            architecture, API, data model, differentiators
 | `npm run db:seed` | Seed food DB + demo data |
 | `npm run db:studio` | Open Prisma Studio |
 
+## Demo account
+
+The seed creates `demo@metabolic.dev` / `demo1234` (prefilled on the login
+page) with history for demos — see
+[`docs/DEMO-RUN-OF-SHOW.md`](docs/DEMO-RUN-OF-SHOW.md) for the 3-minute
+run-of-show. After a demo, remove the account and ALL of its data:
+
+```bash
+cd apps/web
+DEMO_EMAIL=demo@metabolic.dev node scripts/demo-account-cleanup.mjs        # dry-run first
+DEMO_EMAIL=demo@metabolic.dev node scripts/demo-account-cleanup.mjs --yes  # deletes
+```
+
 ## Deploy
 
 See [`docs/DEPLOY.md`](docs/DEPLOY.md) for the Vercel + Turso/Postgres flow and the
