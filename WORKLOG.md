@@ -2,6 +2,15 @@
 
 ---
 
+## 2026-10-29 - Session 2, A10: glucose chart active pill = green tint
+
+Mission A (mockup fidelity). Mockup: the selected range pill is a light-green tint with dark-green text; the implementation used a solid dark-green pill with white text.
+
+- Fix (GlucoseTodayChart.tsx): active pill -> bg-brand-100 + text-brand-800 (dark: brand-900/40 + brand-200), matching the app's existing selected-nav pattern; inactive pills unchanged.
+- Gates: 616 passed + 3 skipped · tsc ×3 silent · lint = the 3 known `<img>` warnings · build "Compiled successfully".
+
+---
+
 ## 2026-10-29 - Session 2, A9: sidebar brand = MetabolicInt + heart mark
 
 Mission A (mockup fidelity). Mockup brand: "MetabolicInt" + "Personal metabolic model" subtitle + heart-in-rounded-square mark; implementation read "Metabolic" with a plain green square.

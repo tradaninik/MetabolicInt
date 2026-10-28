@@ -129,7 +129,7 @@ export default function GlucoseTodayChart({ chart }: { chart: GlucoseChartData }
               onClick={() => setRange(r)}
               className={`rounded-full px-3 py-1 transition ${
                 range === r
-                  ? 'bg-brand-600 font-medium text-white'
+                  ? 'bg-brand-100 font-medium text-brand-800 dark:bg-brand-900/40 dark:text-brand-200'
                   : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
               }`}
             >
