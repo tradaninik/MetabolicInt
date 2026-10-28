@@ -2,6 +2,15 @@
 
 ---
 
+## 2026-10-29 - Session 2, A9: sidebar brand = MetabolicInt + heart mark
+
+Mission A (mockup fidelity). Mockup brand: "MetabolicInt" + "Personal metabolic model" subtitle + heart-in-rounded-square mark; implementation read "Metabolic" with a plain green square.
+
+- Fix (AppShell.tsx): brand text -> "MetabolicInt", subtitle line under it (desktop sidebar; mobile top bar stays compact), and a new inline BrandMark component (heart SVG inside the brand square - no new dependencies). Same treatment in the mobile header.
+- Gates: 616 passed + 3 skipped · tsc ×3 silent · lint = the 3 known `<img>` warnings · build "Compiled successfully".
+
+---
+
 ## 2026-10-29 - Session 2, A8: header "Log glucose" outline button
 
 Mission A (mockup fidelity). The mockup header carries two actions - "Log glucose" (outline) + "+ Log a meal" (solid green); the implementation had only the meal button.
