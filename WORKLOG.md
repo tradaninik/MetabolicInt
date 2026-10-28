@@ -2,6 +2,16 @@
 
 ---
 
+## 2026-10-29 - Session 2, B-API: quizVersion + history in GET, B1 fields in every payload
+
+Mission B step 2. The prakriti API now speaks the B1 engine's language; zero schema change (history rows + index already existed).
+
+- GET: single findMany (latest 10, takenAt desc) replaces the findFirst - rows[0] IS the latest, behavior preserved. Response gains `quizVersion` (top level) and `history[]` (takenAt + stored counts + rescored pcts/profileLabel/isTie per row). Every stored row is RESCORED with the current engine, so pre-B1 rows also display the no-dominance label; rows whose answers no longer validate degrade to counts-only, never an error.
+- GET/POST `profile` payloads gain `profileLabel` + `isTie` + `quizVersion` (POST response also carries quizVersion top level). POST stays a new-row-per-retake, owner-guarded, 400 on incomplete answers - untouched semantics.
+- Gates: 619 passed + 3 skipped · tsc ×3 silent · lint = the 3 known `<img>` warnings · build "Compiled successfully".
+
+---
+
 ## 2026-10-29 - Session 2, B1: engine tie semantics - profileLabel + QUIZ_VERSION (Ayurveda Phase 1)
 
 Mission B step 1 (engine-first, tests updated deliberately - see below). The spec complaint, live-reproduced at 25ed988: a 5/5/2 tie displayed "Vata primary · Pitta secondary" at 42%/42% - a tie implying dominance.
