@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import AppShell from '@/components/AppShell';
 import PostMealFeedback from '@/components/PostMealFeedback';
 import RecentMeals from '@/components/RecentMeals';
@@ -594,7 +595,11 @@ export default function LogPage() {
               onChange={(e) => e.target.files?.[0] && handlePhoto(e.target.files[0])}
               className="text-xs"
             />
-            {photoPath && <img src={photoPath} alt="meal" className="h-16 w-16 rounded-lg object-cover" />}
+            {/* S2-E: data-URL photo — next/image with unoptimized (the optimizer
+                cannot handle data URLs); identical rendering to the old <img>. */}
+            {photoPath && (
+              <Image src={photoPath} alt="meal photo" unoptimized width={64} height={64} className="h-16 w-16 rounded-lg object-cover" />
+            )}
           </div>
           <p className="mt-2 text-[11px] text-neutral-400">
             Photo is stored locally for now. Automatic food recognition is a later upgrade - for now, add items below.

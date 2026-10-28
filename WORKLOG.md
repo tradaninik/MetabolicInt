@@ -2,6 +2,16 @@
 
 ---
 
+## 2026-10-29 - Session 2, E: lint to ZERO + next-lint -> ESLint CLI migration
+
+Mission E (both parts). The 3 known `<img>` warnings are gone and the deprecated `next lint` (removed in Next 16) is replaced by the ESLint CLI.
+
+- E1 img -> next/image: log/page.tsx meal photo (data URL -> `<Image unoptimized>`, identical rendering; the optimizer cannot handle data URLs); CookWithWhatIHave.tsx + RecipeCatalog.tsx category cards (`<Image>` with the same fixed 16:10 box; lazy by default, loading/decoding attrs dropped as redundant).
+- E2 lint migration: new eslint.config.mjs (FlatCompat extending next/core-web-vitals - the create-next-app@15 scaffold) + `.next/out/build` global ignores (which `next lint` applied silently) + package.json `"lint": "eslint ."`. `.eslintrc.json` removed. Broader scope than `next lint` (which only scanned source dirs): postcss.config.mjs now linted too - its anonymous-default-export warning fixed with a named const. NO ESLint dependency changes; Prisma untouched (5.22 stays).
+- Gates: 619 passed + 3 skipped · tsc ×3 silent · **lint 0 warnings / 0 errors** (was 3 warnings + deprecation notice) · build "Compiled successfully".
+
+---
+
 ## 2026-10-29 - Session 2, A2b: explicit key on MeasuredDot (completes the no-console-errors acceptance)
 
 The B-smoke captured a NEW console warning the A-smoke grep missed (it only counted the key-spread string): "Each child in a list should have a unique key prop... passed a child from Line" — 3 occurrences, not present in the pre-session baseline logs. Root cause: A2's first fix removed the spread (which had smuggled recharts' key in) but also removed the key itself.
