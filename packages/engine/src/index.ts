@@ -31,3 +31,4 @@ export * from './labReportParser';
 export * from './labCompare';
 export * from './patterns';
 export * from './attribution';
+export * from './suggestions';

@@ -12,6 +12,11 @@ import {
   netCarbsG,
   attributeDeviation,
   type AttributionResult,
+  deriveSuggestions,
+  type MedAdherenceInput,
+  type Suggestion,
+  type EveningRecord,
+  type DinnerRecord,
   mealSlotForHour,
   medsToday,
   sleepContext,
@@ -151,6 +156,8 @@ export interface DashboardData {
   attribution: AttributionResult;
   /** horizontal "Today's metabolic timeline" (revamp item 5) */
   metabolicTimeline: TimelineItem[];
+  /** pattern-derived "Today's suggestions" (revamp item 6) */
+  suggestions: Suggestion[];
   weightSeries: { t: number; kg: number }[];
   insights: ReturnType<typeof discoverInsights>;
   forecast: ReturnType<typeof forecast>;
@@ -158,6 +165,10 @@ export interface DashboardData {
 }
 
 export async function loadDashboardData(userId: string): Promise<DashboardData | null> {
+  // Trailing-7-IST-day window for medication logs: the "X of 7 missed this
+  // week" suggestion needs the week, everything else needs today (filtered
+  // further down by exact logDate).
+  const weekStartStr = istDayBounds(Date.now() - 6 * DAY).dateStr;
   // S-1 perf: the user row (with relations) and the merged food index are
   // independent queries - run them concurrently instead of paying a full
   // server<->DB round trip between them. Column lists are explicit (lean
@@ -212,7 +223,7 @@ export async function loadDashboardData(userId: string): Promise<DashboardData |
             name: true,
             scheduleTimes: true,
             logs: {
-              where: { logDate: istNow().slice(0, 10) },
+              where: { logDate: { gte: weekStartStr } },
               select: { slotTime: true, logDate: true, status: true, createdAt: true },
             },
           },
@@ -569,6 +580,81 @@ export async function loadDashboardData(userId: string): Promise<DashboardData |
     });
   }
   metabolicTimeline.sort((a, b) => a.t - b.t);
+
+  // --- Dashboard revamp item 6: pattern-derived "Today's suggestions" ------
+  // Replaces the hardcoded "AI Daily Recommendations". Every suggestion is
+  // derived from the user's own records by the pure engine (suggestions.ts)
+  // and is absent when the evidence is thin - no filler.
+  const evenings = new Map<string, EveningRecord>();
+  for (const g of user.glucoseReadings) { // desc: first hit per date = last reading that evening
+    const t = g.takenAt.getTime();
+    if (t < nowMs - 14 * DAY) continue;
+    if (istHour(t) < 20) continue;
+    const b = istDayBounds(t);
+    if (!evenings.has(b.dateStr)) {
+      evenings.set(b.dateStr, { date: b.dateStr, hasPostDinnerWalk: false, bedtimeReading: g.value });
+    }
+  }
+  for (const a of user.activityEntries) {
+    const t = a.at.getTime();
+    if (a.type !== 'walk' || t < nowMs - 14 * DAY) continue;
+    const b = istDayBounds(t);
+    const eve = evenings.get(b.dateStr);
+    if (eve && istHour(t) >= 19) eve.hasPostDinnerWalk = true;
+  }
+  const dinnerHourByDate = new Map<string, number>();
+  for (const m of user.foodEntries) {
+    const t = m.loggedAt.getTime();
+    if (t < nowMs - 15 * DAY) continue;
+    const h = istHour(t) + (new Date(t).getUTCMinutes() / 60);
+    if (mealSlotForHour(istHour(t)) !== 'dinner') continue;
+    const b = istDayBounds(t);
+    const cur = dinnerHourByDate.get(b.dateStr);
+    if (cur === undefined || h > cur) dinnerHourByDate.set(b.dateStr, h);
+  }
+  const fastingByDate = new Map<string, number>();
+  for (let i = user.glucoseReadings.length - 1; i >= 0; i--) { // asc: first reading per morning
+    const g = user.glucoseReadings[i];
+    const t = g.takenAt.getTime();
+    if (t < nowMs - 15 * DAY) continue;
+    const h = istHour(t);
+    if (h < 5 || h >= 10) continue;
+    const b = istDayBounds(t);
+    if (!fastingByDate.has(b.dateStr)) fastingByDate.set(b.dateStr, g.value);
+  }
+  const dinners: DinnerRecord[] = [];
+  for (const [date, hour] of dinnerHourByDate) {
+    const nextDate = istDayBounds(istSlotEpoch(date, '12:00') + DAY).dateStr;
+    dinners.push({ date, dinnerHour: hour, nextMorningFasting: fastingByDate.get(nextDate) ?? null });
+  }
+  let medAdherence: MedAdherenceInput | null = null;
+  for (const med of user.meds) {
+    let slotList: string[] = [];
+    try {
+      const parsed = JSON.parse(med.scheduleTimes);
+      if (Array.isArray(parsed)) slotList = parsed.filter((s): s is string => typeof s === 'string' && /^\d{2}:\d{2}$/.test(s));
+    } catch { slotList = []; }
+    for (const slotTime of slotList) {
+      if (slotTime < '17:00') continue; // evening slots only
+      let scheduled = 0;
+      let missed = 0;
+      for (let d = 6; d >= 0; d--) {
+        const dateStr = istDayBounds(nowMs - d * DAY).dateStr;
+        if (istSlotEpoch(dateStr, slotTime) > nowMs) continue; // slot still in the future
+        scheduled++;
+        const taken = med.logs.some((l) => l.logDate === dateStr && l.slotTime === slotTime && l.status === 'taken');
+        if (!taken) missed++;
+      }
+      if (!medAdherence || missed > medAdherence.missedThisWeek) {
+        medAdherence = { name: med.name, slotTime, missedThisWeek: missed, scheduledThisWeek: scheduled };
+      }
+    }
+  }
+  const suggestions = deriveSuggestions({
+    evenings: [...evenings.values()],
+    dinners,
+    medAdherence,
+  });
   const weightSeries = user.weightEntries
     .map((w) => ({ t: w.takenAt.getTime(), kg: w.kg }))
     .sort((a, b) => a.t - b.t);
@@ -617,6 +703,7 @@ export async function loadDashboardData(userId: string): Promise<DashboardData |
     glucoseChart,
     attribution,
     metabolicTimeline,
+    suggestions,
     weightSeries,
     insights,
     forecast: fc,

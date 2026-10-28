@@ -3,13 +3,14 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { authOptions } from '@/lib/auth';
 import { loadDashboardData } from '@/lib/engine-service';
-import { greetingForHour, istHour, relativeTime, sourceLabel } from '@/lib/dashboard-stamp';
+import { greetingForHour, istDayBounds, istHour, relativeTime, sourceLabel } from '@/lib/dashboard-stamp';
 import AppShell from '@/components/AppShell';
 import HealthScoreRing from '@/components/dashboard/HealthScoreRing';
 import MetricCardsRow from '@/components/dashboard/MetricCards';
 import GlucoseTodayChart from '@/components/dashboard/GlucoseTodayChart';
 import WhyHighCard from '@/components/dashboard/WhyHighCard';
 import MetabolicTimeline from '@/components/dashboard/MetabolicTimeline';
+import SuggestionsCard from '@/components/dashboard/SuggestionsCard';
 import { WeightForecastChart } from '@/components/dashboard/Charts';
 import { REGION_LABELS } from '@mi/food-db';
 import { getPendingCheckIns } from '@/lib/pairing';
@@ -138,50 +139,10 @@ export default async function DashboardPage() {
           </Card>
         </div>
 
-        {/* AI Daily Recommendations */}
+        {/* Today's suggestions (revamp item 6): pattern-derived, evidence-inline,
+            replacing the old hardcoded AI Daily Recommendations card. */}
         <div className="mt-4">
-          <Card title="AI Daily Recommendations" subtitle="Based on your metabolism and current stats">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="rounded-xl border border-brand-100 bg-brand-50 p-4 dark:border-brand-900/50 dark:bg-brand-950/20">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-lg">🥗</span>
-                  <h3 className="font-semibold text-brand-900 dark:text-brand-100">Suggested Meals</h3>
-                </div>
-                <p className="text-sm text-brand-800 dark:text-brand-300 mb-3">
-                  To keep your glucose stable today, your model suggests these {REGION_LABELS[profile.region]} options:
-                </p>
-                <ul className="space-y-2 text-sm text-brand-700 dark:text-brand-400">
-                  <li className="flex items-center gap-2">
-                    <span className="h-1.5 w-1.5 rounded-full bg-brand-500"></span>
-                    <span>1 Katori Dal with 1 Chapati</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="h-1.5 w-1.5 rounded-full bg-brand-500"></span>
-                    <span>Moong Dal Chilla (Pesarattu)</span>
-                  </li>
-                </ul>
-              </div>
-              <div className="rounded-xl border border-sky-100 bg-sky-50 p-4 dark:border-sky-900/50 dark:bg-sky-950/20">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-lg">👟</span>
-                  <h3 className="font-semibold text-sky-900 dark:text-sky-100">Activity Target</h3>
-                </div>
-                <p className="text-sm text-sky-800 dark:text-sky-300 mb-3">
-                  Your activity score is {Math.round(sub.activity)}. To offset predicted dinner spikes, aim for:
-                </p>
-                <ul className="space-y-2 text-sm text-sky-700 dark:text-sky-400">
-                  <li className="flex items-center gap-2">
-                    <span className="h-1.5 w-1.5 rounded-full bg-sky-500"></span>
-                    <span>15 min brisk walk after dinner</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="h-1.5 w-1.5 rounded-full bg-sky-500"></span>
-                    <span>Avoid sitting for &gt; 2 hours</span>
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </Card>
+          <SuggestionsCard suggestions={data.suggestions} today={istDayBounds(Date.now()).dateStr} />
         </div>
 
         {/* Seasonal guidance (U14 Ritucharya) */}
