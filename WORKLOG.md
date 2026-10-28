@@ -2,6 +2,19 @@
 
 ---
 
+## 2026-10-29 - Session 2 closeout: A (mockup fidelity) + B (Ayurveda Phase 1) + D (deps) + E (tech debt) shipped
+
+Session 2 delivered 16 commits on top of main @ 25ed988, every one gates-green before commit (tests never below 616+3 baseline - final: 619+3; tsc ×3 silent; lint 0/0 after E; build compiled).
+
+- Mission A (dashboard → mockup v1): A2+A2b console errors to zero (key-spread fix + explicit key), A6 timeline below charts row, A7 seasonal+agni side-by-side, A8 header Log glucose button, A9 brand MetabolicInt + heart mark, A10 active pill tint. A1 corrected to a NON-GAP with evidence (the mockup's steps card is 7 bars - exactly what the code renders; the old "line sparkline" claim predated the actual mockup). Live-verified at 1280+390 with VLM checks; console clean. Decision items held for the owner: A11 "Day" pill (functionality), A12 CheckIn/QuickAdd placement, A13 nav IA (deferred to Mission F).
+- Mission B (Ayurveda Phase 1): B1 engine tie semantics (profileLabel names every tied dosha - "Vata–Pitta profile" live-verified on a 5/5/2 tie; isTie; QUIZ_VERSION=1; 6→9 tests, tie tests UPDATED not deleted), API (quizVersion + history in GET, rescored labels for old rows), results page rebuilt (share-of-answers framing, interactive dosha panels, tradition/explore/how-calculated sections, safety copy throughout), history + deltas, wellness card (5 categories, variant cycler, IST-day dismissals, device-local) + Settings off-switch (zero medical loss, user data always visible). Open decisions resolved per documented defaults (results-page placement, localStorage) - flagged for owner confirmation.
+- Mission D: batch 1 next 15.5.28 + next-auth 4.24.15 (criticals, semver), batch 2 npm audit fix no-force (16 transitive, lockfile-only). 18 → 8 advisories; all 8 remaining need majors (vitest@5 chain, next@16 chain) - proposals in MISSION-D-dependency-report.md. No --force ever; Prisma untouched.
+- Mission E: 3 <img> → next/image (data-URL unoptimized for the meal photo); next lint → ESLint CLI (flat config + ignores; postcss named export fixed). Lint: 3 warnings + deprecation → 0/0.
+- Missions C + F: docs only - connection map + roadmap proposals delivered alongside (not committed to the repo; awaiting owner review).
+- Deliverables: session2-patches/ (16 patches) + tarball, gap lists, addendum, D report, connection map, roadmap, before/after screenshots incl. the live tie-break proof.
+
+---
+
 ## 2026-10-29 - Session 2, D-batch-2: semver-safe transitive fixes (18 -> 8 advisories)
 
 Mission D batch 2: plain `npm audit fix` (NO --force - semver-safe only). 16 transitive packages changed (browserslist, brace-expansion, js-yaml, nanoid, postcss chain, sharp, source-map-js, baseline-browser-mapping, uuid et al.); ZERO package.json manifest changes (lockfile-only). Prisma client regenerated post-install.
