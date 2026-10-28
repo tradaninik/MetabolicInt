@@ -115,7 +115,7 @@ export default async function DashboardPage() {
             </p>
           </Card>
 
-          <Card title="Personal insights" subtitle="Auto-discovered from your data">
+          <Card title="Personal insights" subtitle="from your records · every claim traceable">
             {data.insights.length === 0 ? (
               <p className="text-sm text-neutral-500">Keep logging meals, sleep, and glucose — insights appear after a few days.</p>
             ) : (
@@ -155,6 +155,14 @@ export default async function DashboardPage() {
         <div className="mt-4">
           <MetabolicTimeline items={data.metabolicTimeline} />
         </div>
+
+        {/* Provenance line (revamp item 7, approved v1 footer): everything on
+            this page is the user's own data, and every save re-renders it via
+            router.refresh() (QuickAdd / check-in pattern). Honest statement,
+            not a live-stream claim - nothing here polls. */}
+        <p className="mt-6 text-center text-[11px] text-neutral-400 dark:text-neutral-500">
+          MetabolicInt · data shown is yours, entered manually or imported · values update instantly on save
+        </p>
       </div>
     </AppShell>
   );

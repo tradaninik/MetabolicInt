@@ -92,10 +92,20 @@ export default function GlucoseTodayChart({ chart }: { chart: GlucoseChartData }
   }, [range, chart, today]);
 
   const title = range === 'today' ? 'Glucose today' : range === 'week' ? 'Glucose · 7 days' : 'Glucose · 14 days';
-  const subtitle =
+  // Revamp item 7: every data location carries its basis - reading count,
+  // and for Today the latest reading's time + source. Quiet suffix on the
+  // existing subtitle line; no layout change vs the approved v1 mockup.
+  const latestToday = today.readings.at(-1);
+  const basisSuffix =
     range === 'today'
+      ? latestToday
+        ? ` · ${today.readings.length} reading${today.readings.length > 1 ? 's' : ''} · latest ${istClock(latestToday.t)} · ${latestToday.source}`
+        : ' · no readings yet today'
+      : ` · ${(range === 'week' ? chart.week : chart.fortnight).length} readings`;
+  const subtitle =
+    (range === 'today'
       ? 'with meals, medication, activity & context events'
-      : 'readings against the 70–140 mg/dL target band';
+      : 'readings against the 70–140 mg/dL target band') + basisSuffix;
 
   const hourTicks = useMemo(() => {
     const ticks: number[] = [];

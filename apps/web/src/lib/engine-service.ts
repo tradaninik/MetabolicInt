@@ -104,7 +104,7 @@ export interface ChartEvent {
 export interface GlucoseChartToday {
   dayStart: number;
   dayEnd: number;
-  readings: { t: number; value: number; dev: number | null; usualN: number }[];
+  readings: { t: number; value: number; dev: number | null; usualN: number; source: string }[];
   events: ChartEvent[];
   /** usual-pattern forecast from the last reading to end of day; band = uncertainty */
   forecast: { t: number; value: number | null; band: [number, number] | null }[];
@@ -289,7 +289,7 @@ export async function loadDashboardData(userId: string): Promise<DashboardData |
   // population reference, and every card carries its evidence count. The
   // IST calendar day (audience timezone, same convention as /api/meds/log)
   // is the single "today" used by the cards, the chart and the attribution.
-  const readingsAll = user.glucoseReadings.map((g) => ({ value: g.value, takenAt: g.takenAt.getTime() }));
+  const readingsAll = user.glucoseReadings.map((g) => ({ value: g.value, takenAt: g.takenAt.getTime(), source: g.source }));
   const latestG = user.glucoseReadings[0];
   const nowMs = Date.now();
   const istDay = istDayBounds(nowMs);
@@ -377,7 +377,7 @@ export async function loadDashboardData(userId: string): Promise<DashboardData |
     .filter((r) => r.takenAt >= istDay.start && r.takenAt < istDay.end)
     .map((r) => {
       const u = usualPatternAt(readingsAll, r.takenAt, { now: nowMs });
-      return { t: r.takenAt, value: r.value, dev: deviationFromUsual(r.value, u), usualN: u.n };
+      return { t: r.takenAt, value: r.value, dev: deviationFromUsual(r.value, u), usualN: u.n, source: r.source };
     })
     .sort((a, b) => a.t - b.t);
 
