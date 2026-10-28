@@ -1,16 +1,16 @@
-// P8 Day 3 (d3-H) — /recipes: the catalog browse page.
+// P8 Day 4 — /recipes: catalog browse + "cook with what I have".
 //
 // Thin server wrapper: AppShell (sidebar, mobile nav and the
 // medical-disclaimer footer every authed page carries, pinned by
-// appshell-wiring.test.ts) around the RecipeCatalog client component, which
-// owns the filters, pagination and the save-to-my-recipes flow.
+// appshell-wiring.test.ts) around RecipesView, the client toggle between
+// the Day-3 catalog browser and the Day-4 by-ingredients matcher.
 import AppShell from '@/components/AppShell';
-import RecipeCatalog from '@/components/RecipeCatalog';
+import RecipesView from '@/components/RecipesView';
 
 export default function RecipesPage() {
   return (
     <AppShell>
-      <RecipeCatalog />
+      <RecipesView />
     </AppShell>
   );
 }
