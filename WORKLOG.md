@@ -2,6 +2,15 @@
 
 ---
 
+## 2026-10-29 - Session 2, A6: metabolic timeline moved below the charts row
+
+Mission A (mockup fidelity, dashboard-mockup-v1.png). The approved mockup order is metric cards → glucose chart + investigate → **timeline** → score/weight/insights → suggestions → seasonal + agni → footer; the implementation had the timeline dead-last, after Seasonal and Agni.
+
+- Fix: move the MetabolicTimeline block in app/dashboard/page.tsx to directly below the charts row. Pure JSX move; zero component or data changes.
+- Gates: 616 passed + 3 skipped · tsc ×3 silent · lint = the 3 known `<img>` warnings · build "Compiled successfully".
+
+---
+
 ## 2026-10-29 - Session 2, A2: MeasuredDot key-spread console fix
 
 Mission A (dashboard visual fidelity). The only console error on /dashboard (all widths, local + prod) was React's "props object containing a `key` prop is being spread into JSX" from GlucoseTodayChart's dot renderer: recharts passes `key` inside the dot props, and the callback spread `{...p}` into `<MeasuredDot>`.

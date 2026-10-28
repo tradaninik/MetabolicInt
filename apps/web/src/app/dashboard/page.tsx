@@ -85,6 +85,12 @@ export default async function DashboardPage() {
           <WhyHighCard attribution={data.attribution} glucose={metricCards.glucose} />
         </div>
 
+        {/* Horizontal metabolic timeline (revamp item 5) - directly below the
+            charts row per the approved v1 mockup (was page-bottom before). */}
+        <div className="mt-4">
+          <MetabolicTimeline items={data.metabolicTimeline} />
+        </div>
+
         {/* Score + forecast + insights (score moved beside them by the v1 layout) */}
         <div className="mt-4 grid gap-4 lg:grid-cols-3">
           <Card title="Metabolic Health Score" subtitle="0–100 composite · last 14 days">
@@ -150,11 +156,6 @@ export default async function DashboardPage() {
 
         {/* Agni rhythm (P4c-b U17) */}
         <AgniRhythmCard userId={session.user.id} />
-
-        {/* Horizontal metabolic timeline (revamp item 5) */}
-        <div className="mt-4">
-          <MetabolicTimeline items={data.metabolicTimeline} />
-        </div>
 
         {/* Provenance line (revamp item 7, approved v1 footer): everything on
             this page is the user's own data, and every save re-renders it via
