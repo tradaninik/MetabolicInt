@@ -2,6 +2,21 @@
 
 ---
 
+## 2026-10-29 - Session 2, B-results: Know Your Body results page rebuilt (B0-1/2/4/5/6/7/9 + safety copy)
+
+Mission B step 3. The old result view ("Your profile: Vata primary · Pitta secondary" + 3 static bars) is replaced by a full results page. New components: PrakritiResult.tsx (client) + lib/ayurveda-content.ts (static, clearly-labelled traditional copy).
+
+- B0-1/B0-5: results lead with the engine's profileLabel ("Vata–Pitta profile" on ties) + "Based on the current questionnaire (v1) · last taken …"; ties get an explicit "implies no dominance" note. Legacy primary/secondary is only a fallback for pre-B1 data.
+- B0-2: shares are framed "share of your 12 answers" with the guard "Shares describe your answers, not your body's biology — this is not a 'how much of you is Vata' percentage. Self-reported answers — not medical measurements."
+- B0-4: the three doshas render as interactive rows (count X/12, share %, bar); tapping expands a per-dosha "What the tradition associates with …" panel (balanced/imbalance qualities), each stamped "Traditional account — not a medical description of you."
+- B0-6: "What this tradition suggests" — gentle per-dosha reflection points for the top-count dosha(s), badged "traditional interpretation", footer: medical and nutrition needs always come first; herbal or significant dietary changes belong with a healthcare professional.
+- B0-7: "Explore your preferences" links to existing modules ONLY (healing-foods, recipes, log activity & sleep, dashboard seasonal+agni) — no new stores, no duplicate records.
+- B0-9: "How this is calculated" collapsible explainer (12 questions, one tag per answer, share-of-answers math summing to 100, ties labelled as ties, not clinically validated, not a diagnosis, retakes kept).
+- Safety: no string anywhere describes a dosha as explaining/causing/aggravating a medical measurement; attribution vocabulary untouched (this page makes no medical claims). Internal links use next/link (lint clean).
+- Gates: 619 passed + 3 skipped · tsc ×3 silent · lint = the 3 known `<img>` warnings · build "Compiled successfully".
+
+---
+
 ## 2026-10-29 - Session 2, B-API: quizVersion + history in GET, B1 fields in every payload
 
 Mission B step 2. The prakriti API now speaks the B1 engine's language; zero schema change (history rows + index already existed).
