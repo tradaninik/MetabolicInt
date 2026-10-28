@@ -70,3 +70,97 @@ export function topDoshas(counts: Record<DoshaKey, number>): DoshaKey[] {
   const order: DoshaKey[] = ['vata', 'pitta', 'kapha'];
   return order.filter((d) => counts[d] === top);
 }
+
+// --- S2-B3: "What this means for your day" wellness ideas -------------------
+// Gentle, traditional, non-medical. Every string is either a neutral action
+// or explicitly framed as "the tradition favours/suggests/links…". Nothing
+// claims a medical benefit, mentions any medical measurement, or says a dosha
+// explains any reading. Selection is keyed to the user's own quiz answers
+// (stated preferences) only.
+
+export const WELLNESS_CATEGORIES = ['food', 'movement', 'relaxation', 'sleep', 'reflection'] as const;
+export type WellnessCategory = (typeof WELLNESS_CATEGORIES)[number];
+
+export const WELLNESS_CATEGORY_LABEL: Record<WellnessCategory, string> = {
+  food: 'Food',
+  movement: 'Movement',
+  relaxation: 'Relaxation',
+  sleep: 'Sleep',
+  reflection: 'Reflection',
+};
+
+/** Links into existing modules only, and only where one maps naturally. */
+export const WELLNESS_LINK: Partial<Record<WellnessCategory, { href: string; label: string }>> = {
+  food: { href: '/recipes', label: 'Recipes' },
+  movement: { href: '/log', label: 'Log activity' },
+  sleep: { href: '/log', label: 'Log sleep' },
+};
+
+export const WELLNESS_IDEAS: Record<DoshaKey, Record<WellnessCategory, string[]>> = {
+  vata: {
+    food: [
+      'Warm, freshly cooked food at steady times — the tradition favours regularity for vata-leaning answers.',
+      'A warm drink with meals instead of cold, dry snacks — the traditional choice for vata-leaning answers.',
+    ],
+    movement: [
+      'A gentle 15-minute walk after your largest meal.',
+      'Easy, rhythmic movement — the tradition prefers it to bursts of intense effort for vata-leaning answers.',
+    ],
+    relaxation: [
+      'Five minutes of slow, even breathing before your evening meal.',
+      'A few quiet minutes without screens before bed — the tradition links stillness with settled vata.',
+    ],
+    sleep: [
+      'A fixed wind-down time tonight — regularity is the tradition’s theme for vata-leaning answers.',
+      'Warm feet, warm drink, early lights-out — the traditional wind-down for vata-leaning answers.',
+    ],
+    reflection: [
+      'Note one moment today when you felt scattered — just notice, no judging.',
+      'Jot down tomorrow’s one most-important thing; the tradition links settled plans with settled vata.',
+    ],
+  },
+  pitta: {
+    food: [
+      'Cooling, mildly spiced food — the tradition suggests going easy on chilli and fried heat for pitta-leaning answers.',
+      'Eat without working at the same time — the tradition ties undistracted meals to balanced pitta.',
+    ],
+    movement: [
+      'A moderate walk in the cooler part of the day.',
+      'Exercise at an effort you could still chat at — the tradition prefers moderation over competition for pitta-leaning answers.',
+    ],
+    relaxation: [
+      'Ten minutes of something deliberately slow after your busiest stretch.',
+      'Step away from the heat — literal or emotional — for a few quiet minutes.',
+    ],
+    sleep: [
+      'Lights out before the second wind — the tradition links late nights with heated pitta.',
+      'A cool, dark, quiet room tonight — the traditional setup for pitta-leaning answers.',
+    ],
+    reflection: [
+      'Notice one irritation today without acting on it — just watch it pass.',
+      'End the day noting one thing that went right; the tradition favours contentment over conquest for pitta.',
+    ],
+  },
+  kapha: {
+    food: [
+      'Lighter cooking with warming spices — the tradition favours these for kapha-leaning answers.',
+      'An earlier, lighter dinner tonight; the tradition suggests giving the evening a long gap.',
+    ],
+    movement: [
+      'A brisk 20-minute walk, ideally before your first meal.',
+      'A few minutes of movement that makes you breathe harder — the tradition favours invigorating effort for kapha-leaning answers.',
+    ],
+    relaxation: [
+      'Rest after effort, not instead of it — the tradition ties balanced kapha to earned rest.',
+      'A few energising breaths instead of a nap this afternoon.',
+    ],
+    sleep: [
+      'Up and into daylight early — the tradition favours early rising for kapha-leaning answers.',
+      'Keep tonight’s sleep to a steady window; long lie-ins traditionally weigh kapha down.',
+    ],
+    reflection: [
+      'Note one small thing you finished today — momentum is the tradition’s kapha theme.',
+      'Choose tomorrow’s first move tonight, and start with it before anything slow.',
+    ],
+  },
+};

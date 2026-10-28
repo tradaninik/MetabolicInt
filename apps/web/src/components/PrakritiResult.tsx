@@ -12,6 +12,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { DOSHA_INFO, TRADITION_REFLECTIONS, topDoshas, type DoshaKey } from '@/lib/ayurveda-content';
+import { useAyurvedaEnabled } from '@/lib/ayurveda-prefs';
+import PrakritiWellnessCard from './PrakritiWellnessCard';
 import type { HistoryItem } from './PrakritiQuiz';
 
 export interface ProfileView {
@@ -50,6 +52,10 @@ export default function PrakritiResult({
   onRetake: () => void;
 }) {
   const [openDosha, setOpenDosha] = useState<DoshaKey | null>(null);
+  // S2-B5 off-switch: hides the traditional-suggestion surfaces; the user's
+  // own assessment (scores, label, history) always stays visible. Zero loss
+  // of any medical feature — none of this page is medical.
+  const [ayurvedaOn] = useAyurvedaEnabled();
 
   const counts: Record<DoshaKey, number> = { vata: profile.vata, pitta: profile.pitta, kapha: profile.kapha };
   const rows: { key: DoshaKey; count: number; pct?: number }[] = [
@@ -88,27 +94,36 @@ export default function PrakritiResult({
         {rows.map((r) => {
           const info = DOSHA_INFO[r.key];
           const open = openDosha === r.key;
+          const rowBody = (
+            <>
+              <span className="w-14 shrink-0 text-sm text-neutral-600 dark:text-neutral-300">{info.name}</span>
+              <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
+                <div
+                  className={`h-full ${DOSHA_BAR[r.key]}`}
+                  style={{ width: `${r.pct ?? Math.round((r.count / 12) * 100)}%` }}
+                />
+              </div>
+              <span className="w-24 shrink-0 text-right text-sm tabular-nums text-neutral-600 dark:text-neutral-300">
+                {r.count}/12{r.pct !== undefined ? ` · ${r.pct}%` : ''}
+              </span>
+            </>
+          );
           return (
             <div key={r.key} className="rounded-lg border border-neutral-200 dark:border-neutral-800">
-              <button
-                type="button"
-                aria-expanded={open}
-                onClick={() => setOpenDosha(open ? null : r.key)}
-                className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
-              >
-                <span className="w-14 shrink-0 text-sm text-neutral-600 dark:text-neutral-300">{info.name}</span>
-                <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
-                  <div
-                    className={`h-full ${DOSHA_BAR[r.key]}`}
-                    style={{ width: `${r.pct ?? Math.round((r.count / 12) * 100)}%` }}
-                  />
-                </div>
-                <span className="w-24 shrink-0 text-right text-sm tabular-nums text-neutral-600 dark:text-neutral-300">
-                  {r.count}/12{r.pct !== undefined ? ` · ${r.pct}%` : ''}
-                </span>
-                <span className="w-4 shrink-0 text-center text-xs text-neutral-400" aria-hidden>{open ? '−' : '+'}</span>
-              </button>
-              {open && (
+              {ayurvedaOn ? (
+                <button
+                  type="button"
+                  aria-expanded={open}
+                  onClick={() => setOpenDosha(open ? null : r.key)}
+                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
+                >
+                  {rowBody}
+                  <span className="w-4 shrink-0 text-center text-xs text-neutral-400" aria-hidden>{open ? '−' : '+'}</span>
+                </button>
+              ) : (
+                <div className="flex w-full items-center gap-2 px-3 py-2.5">{rowBody}</div>
+              )}
+              {ayurvedaOn && open && (
                 <div className="border-t border-neutral-100 px-3 py-3 text-xs leading-relaxed dark:border-neutral-900">
                   <p className="font-medium text-neutral-700 dark:text-neutral-200">What the tradition associates with {info.name}</p>
                   <p className="mt-1 text-neutral-600 dark:text-neutral-400">{info.tradition}</p>
@@ -169,8 +184,11 @@ export default function PrakritiResult({
         </ul>
       )}
 
-      {/* What this tradition suggests (B0-6) */}
-      <h3 className="mt-6 text-sm font-semibold">What this tradition suggests</h3>
+      {/* What this tradition suggests (B0-6) — hidden when Ayurvedic
+          personalisation is off (Settings); the note below explains. */}
+      {ayurvedaOn ? (
+        <>
+          <h3 className="mt-6 text-sm font-semibold">What this tradition suggests</h3>
       <span className="mt-1 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
         traditional interpretation
       </span>
@@ -185,9 +203,19 @@ export default function PrakritiResult({
         ))}
       </div>
       <p className="mt-3 text-[11px] leading-relaxed text-neutral-500">
-        Traditional reflection points — not medical advice. Your medical and nutrition needs always come first,
-        and any herbal remedy or significant dietary change belongs in a conversation with your healthcare professional.
-      </p>
+            Traditional reflection points — not medical advice. Your medical and nutrition needs always come first,
+            and any herbal remedy or significant dietary change belongs in a conversation with your healthcare professional.
+          </p>
+
+          {/* What this means for your day (B0-10) */}
+          <PrakritiWellnessCard top={reflectionDoshas} />
+        </>
+      ) : (
+        <p className="mt-6 rounded-lg border border-neutral-200 px-3 py-2.5 text-xs text-neutral-500 dark:border-neutral-800">
+          Ayurvedic personalisation is off — your assessment and history stay; traditional suggestions are hidden.
+          Turn it back on in <Link href="/settings" className="text-brand-600 hover:underline dark:text-brand-400">Settings</Link>.
+        </p>
+      )}
 
       {/* Explore your preferences (B0-7) — existing modules only */}
       <h3 className="mt-6 text-sm font-semibold">Explore your preferences</h3>

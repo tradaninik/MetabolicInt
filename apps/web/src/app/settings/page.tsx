@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import AppShell from '@/components/AppShell';
+import { useAyurvedaEnabled } from '@/lib/ayurveda-prefs';
 
 interface TargetPair {
   low: number;
@@ -48,6 +49,8 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  // S2-B5 off-switch — device-local preference (no schema change).
+  const [ayurvedaOn, setAyurvedaOn] = useAyurvedaEnabled();
 
   useEffect(() => {
     fetch('/api/settings')
@@ -184,6 +187,38 @@ export default function SettingsPage() {
             {saving ? 'Saving...' : 'Save settings'}
           </button>
           {msg && <p className="mt-3 text-sm text-brand-600 dark:text-brand-400">{msg}</p>}
+        </div>
+
+        {/* S2-B5: Ayurveda personalisation off-switch (device-local). Off hides
+            the traditional suggestion surfaces with ZERO loss of medical
+            features; the user's own assessment + history always stay visible. */}
+        <div className="mt-4 rounded-2xl border border-neutral-200 p-5 dark:border-neutral-800">
+          <h2 className="text-lg font-semibold">Ayurveda personalisation</h2>
+          <p className="mt-1 text-sm text-neutral-500">
+            Show traditional (Ayurvedic) wellbeing content — the Know Your Body tradition sections and
+            daily ideas. Turning this off hides them; every medical feature stays exactly as it is.
+          </p>
+          <div className="mt-3 flex items-center gap-3">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={ayurvedaOn}
+              aria-label="Ayurveda personalisation"
+              onClick={() => setAyurvedaOn(!ayurvedaOn)}
+              className={`relative h-6 w-11 shrink-0 rounded-full transition ${ayurvedaOn ? 'bg-brand-600' : 'bg-neutral-300 dark:bg-neutral-700'}`}
+            >
+              <span
+                className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${ayurvedaOn ? 'left-[22px]' : 'left-0.5'}`}
+              />
+            </button>
+            <span className="text-sm">
+              {ayurvedaOn ? 'On — tradition sections and daily ideas visible' : 'Off — traditional suggestions hidden'}
+            </span>
+          </div>
+          <p className="mt-2 text-xs text-neutral-400">
+            This preference lives on this device only (like your daily plan ticks). Your Know Your Body
+            answers and assessment history always remain visible under Know Your Body.
+          </p>
         </div>
       </div>
     </AppShell>

@@ -2,6 +2,18 @@
 
 ---
 
+## 2026-10-29 - Session 2, B-wellness: "What this means for your day" + Ayurveda off-switch (B0-10/11/12)
+
+Mission B step 5, with the two open decisions resolved per the documented defaults (both flagged to the owner): wellness card lives on the PRAKITI RESULTS PAGE (the mockup dashboard shows no dosha-specific card - its three suggestions are pattern/medical), and storage is DEVICE-LOCAL (B4: zero new tables, zero Turso migration).
+
+- New lib/ayurveda-prefs.ts: `mi.ayurveda.personalisation` localStorage preference (default ON, degrades ON on storage failure), mounted-safe useAyurvedaEnabled hook, IST-day helpers, and the wellness dismiss/variant keys - the Add-to-plan device-local pattern, extended.
+- New PrakritiWellnessCard (results page, inside "What this tradition suggests"): five categories - Food / Movement / Relaxation / Sleep / Reflection. Ideas are keyed to the user's own quiz answers ONLY (on a tie the categories alternate between the tied doshas - balanced, no winner implied); two variants per category with a "Different idea" cycler (variant persists as the user's preference) and a "Not today" dismissal (resets with the IST day, Add-to-plan pattern). Links only into existing modules (recipes / activity+sleep logging). NEVER a response to any medical reading - the selection deliberately does not read glucose/sleep/steps data (Layer separation: traditional content reacts to stated preferences only).
+- Off-switch (Settings -> "Ayurveda personalisation", role=switch): OFF hides the per-dosha tradition panels, "What this tradition suggests", and the wellness card - replaced by a one-line note linking back to Settings. The user's own assessment (label, scores, history) ALWAYS stays visible. Zero loss of any medical feature (nothing on this page is medical). Device-local; if cross-device sync is ever wanted that is a written UserSettings.prefsJson turso-migrate proposal first.
+- Safety copy stays hard: every idea is a neutral action or explicitly "the tradition favours/suggests"; nothing claims a medical benefit or mentions any measurement.
+- Gates: 619 passed + 3 skipped · tsc ×3 silent · lint = the 3 known `<img>` warnings · build "Compiled successfully".
+
+---
+
 ## 2026-10-29 - Session 2, B-history: retake history + deltas on the results page (B0-8)
 
 Mission B step 4. Rows already existed and are indexed — this is UI only, zero schema/API change (GET has returned history[] since the B-API commit).
