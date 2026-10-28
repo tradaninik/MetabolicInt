@@ -179,11 +179,19 @@ export default function GlucoseTodayChart({ chart }: { chart: GlucoseChartData }
             dataKey="value"
             stroke="#16b077"
             strokeWidth={2}
-            dot={(p: { cx?: number; cy?: number; payload?: { t: number } }) => (
-              // Explicit props, never a spread: recharts passes a `key` inside the
-              // dot-render props, and spreading a key-carrying object into JSX is
-              // the console error this app forbids (was the page's only error).
-              <MeasuredDot cx={p.cx} cy={p.cy} payload={p.payload} focusT={today.focusT} />
+            dot={(p: { cx?: number; cy?: number; index?: number; payload?: { t: number } }) => (
+              // Explicit props + explicit key, never a spread: recharts passes a
+              // `key` inside the dot-render props. The old spread delivered it
+              // (key-spread console error); A2's first fix removed the spread
+              // but also the key, which re-triggered React's list-key warning.
+              // The point's timestamp is the stable identity; index is fallback.
+              <MeasuredDot
+                key={p.payload?.t ?? p.index}
+                cx={p.cx}
+                cy={p.cy}
+                payload={p.payload}
+                focusT={today.focusT}
+              />
             )}
             connectNulls
             isAnimationActive={false}

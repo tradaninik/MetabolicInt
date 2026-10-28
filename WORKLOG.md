@@ -2,6 +2,16 @@
 
 ---
 
+## 2026-10-29 - Session 2, A2b: explicit key on MeasuredDot (completes the no-console-errors acceptance)
+
+The B-smoke captured a NEW console warning the A-smoke grep missed (it only counted the key-spread string): "Each child in a list should have a unique key prop... passed a child from Line" — 3 occurrences, not present in the pre-session baseline logs. Root cause: A2's first fix removed the spread (which had smuggled recharts' key in) but also removed the key itself.
+
+- Fix: pass an explicit `key` on the MeasuredDot element — `key={p.payload?.t ?? p.index}` (the point's timestamp is its stable identity; index is fallback). This is exactly what React's original error message asked for: keys passed directly to JSX, never via spread.
+- Gates: 619 passed + 3 skipped · tsc ×3 silent · lint = the 3 known `<img>` warnings · build "Compiled successfully".
+- Verification pending in the final smoke (dashboard console must show ZERO errors of either kind).
+
+---
+
 ## 2026-10-29 - Session 2, B-wellness: "What this means for your day" + Ayurveda off-switch (B0-10/11/12)
 
 Mission B step 5, with the two open decisions resolved per the documented defaults (both flagged to the owner): wellness card lives on the PRAKITI RESULTS PAGE (the mockup dashboard shows no dosha-specific card - its three suggestions are pattern/medical), and storage is DEVICE-LOCAL (B4: zero new tables, zero Turso migration).
