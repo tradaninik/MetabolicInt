@@ -2,6 +2,17 @@
 
 ---
 
+## 2026-10-29 - Session 2, B1: engine tie semantics - profileLabel + QUIZ_VERSION (Ayurveda Phase 1)
+
+Mission B step 1 (engine-first, tests updated deliberately - see below). The spec complaint, live-reproduced at 25ed988: a 5/5/2 tie displayed "Vata primary · Pitta secondary" at 42%/42% - a tie implying dominance.
+
+- `packages/engine/src/prakriti.ts`: new `profileLabel` + `isTie` on PrakritiResult. Tie (top count shared by 2+ doshas) -> every sharer named with en-dashes, ordered by count then the engine's canonical vata > pitta > kapha order ("Vata–Pitta profile", "Vata–Pitta–Kapha profile"); clear winner keeps "X primary · Y secondary". `primary`/`secondary` keep the legacy deterministic order ONLY for stored rows / API compat - the UI must lead with `profileLabel`. New `QUIZ_VERSION = 1` constant, stamped on every result (no Prisma column - per B4, zero schema change this session).
+- Tie-order note: the canonical order matches the spec's own "Vata–Pitta profile" example for the 42/42 case; strict alphabetical on ties would render that case "Pitta–Vata". Flagged to the owner - one-line change if alphabetical is preferred.
+- DELIBERATE TEST CHANGES (prakriti.test.ts, 6 -> 9 tests, suite 616 -> 619 passed): the 3 old tie tests are UPDATED, not deleted - each keeps its legacy primary/secondary assertions and gains profileLabel/isTie assertions ("Vata–Pitta profile" for 42/42/16, "Pitta–Kapha profile", "Vata–Pitta–Kapha profile" for 4/4/4). NEW tests: vata/kapha tie label, 1-answer-gap-is-NOT-a-tie boundary, and the QUIZ_VERSION stamp. The unanimous test gains the three new result fields.
+- Gates: 619 passed + 3 skipped (51 files) · tsc ×3 silent · lint = the 3 known `<img>` warnings · build "Compiled successfully".
+
+---
+
 ## 2026-10-29 - Session 2, A10: glucose chart active pill = green tint
 
 Mission A (mockup fidelity). Mockup: the selected range pill is a light-green tint with dark-green text; the implementation used a solid dark-green pill with white text.
