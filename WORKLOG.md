@@ -2,6 +2,15 @@
 
 ---
 
+## 2026-10-29 - Session 2, D-batch-1: critical runtime fixes - next 15.5.28 + next-auth 4.24.15
+
+Mission D (semver-only, small batches, NO --force). Batch 1 = the two CRITICAL runtime advisories, both semver-safe: next 15.5.19 -> 15.5.28 and next-auth 4.24.14 -> 4.24.15 (+ eslint-config-next aligned to 15.5.28; 7 packages changed). Prisma client regenerated after the install. No other dependency touched.
+
+- Gates: 619 passed + 3 skipped · tsc ×3 silent · lint 0/0 · build "Compiled successfully".
+- Remaining after this batch: the 10 semver-safe transitive advisories (batch 2) + the 6 vitest-chain advisories that need the vitest@5 MAJOR (written proposal only - see MISSION-D-vitest-proposal.md).
+
+---
+
 ## 2026-10-29 - Session 2, E: lint to ZERO + next-lint -> ESLint CLI migration
 
 Mission E (both parts). The 3 known `<img>` warnings are gone and the deprecated `next lint` (removed in Next 16) is replaced by the ESLint CLI.
