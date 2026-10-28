@@ -2,6 +2,30 @@
 
 ---
 
+## 2026-10-28 - Dashboard revamp v1 shipped (items 1-7, approved redesign)
+
+The approved dashboard redesign v1, implemented commit-by-commit with all gates green per commit. Zero migration (0006 stays reserved); no package.json changes; engine + food-db gained pure modules only.
+
+- Item 1 (hero -> greeting): photo hero replaced by "Good <part of day>, <name>" + honest "Updated <rel> - <source>" stamp (lib/dashboard-stamp.ts: istHour/greetingForHour/latestUpdate/relativeTime/sourceLabel, pure, 12 tests). Stamp = most recent of the user's own records across all seven streams, recomputed every render.
+- Item 2 (six metric cards): Glucose-Latest (deviation vs user's own same-hour pattern + source stamp), Time-in-Range (70-140), Steps (7-day sparkline vs own avg + sync stamp), Sleep (vs own usual), Weight (30-day delta), Meds (taken/scheduled from MedicationLog + Medication schedule). New engine module patterns.ts (usualPatternAt, deviationFromUsual, timeInRange, step/stats helpers; 307-line test file). engine-service now loads MedicationLog + DayContextTag + activity source. Seed gains demo metformin schedule + today's taken log.
+- Item 3 (glucose chart): GlucoseTodayChart (recharts ComposedChart) - Today/Week/14d toggle; event markers D/M/W/S under the axis (dashed = planned: upcoming med slots are the only planned source until the Phase C planner); measured = solid line, usual-pattern forecast = dashed + uncertainty band; tooltip shows value, deviation vs usual, nearby events; amber ring on the reading of interest.
+- Item 4 ('Why was it high?'): engine-first attribution.ts (candidate factors ranked around the latest above-usual reading; three labels ONLY - observed pattern / possible contributor / insufficient data; association never causation) + 184-line test file, then WhyHighCard on the dashboard.
+- Item 5 (horizontal timeline): MetabolicTimeline - every event of the IST day as horizontally-scrolling cards joined by arrows, color-coded top borders, planned dashed, focus highlight, every card links to its edit page.
+- Item 6 (suggestions): hardcoded "AI Daily Recommendations" replaced by pattern-derived "Today's suggestions" (engine suggestions.ts + tests): from pattern / from model / reminder badges, evidence inline, Add-to-plan persists on-device (localStorage, IST-day keyed) until the Phase C planner ships - the copy says so.
+- Item 7 (instant refresh + stamps everywhere): chart subtitle carries its data basis (reading count + latest time + source), insights subtitle aligned to approved copy, page-bottom provenance line ("data shown is yours, entered manually or imported - values update instantly on save"), dashboard-provenance.test.ts wiring scan (11 tests) pins router.refresh() on every save path, bans setInterval/EventSource/WebSocket under components/dashboard, keeps the page a server component. Browser-verified: a QuickAdd save flips the header stamp to "just now" and re-renders cards/chart/timeline with no polling.
+
+Suite: 520 -> 616 passed (+3 skipped constant); tsc x3, lint, build clean throughout (56 pages). Delivery: patch series 0001-0007, one commit per item.
+
+Post-deploy smoke checklist:
+1. /dashboard: greeting + Updated stamp (no hero photo); six metric cards each with their own stamp/basis line.
+2. Chart: Today/Week/14d pills switch; D/M/W/S markers with dashed-planned; tooltip shows deviation + nearby events; subtitle shows reading count + latest source.
+3. "Why was it high?" appears when the latest reading is above the user's usual; three-label vocabulary only; footer keeps the association wording.
+4. Suggestions: badges + evidence lines; Add to plan flips to "Added" (device-local until planner).
+5. Timeline scrolls horizontally; planned med slots dashed; focus reading highlighted.
+6. Quick log any value: header stamp -> "just now", cards/chart/timeline update without a manual reload.
+
+---
+
 ## 2026-10-22 - Phase 3 closeout (KI-1, P3-5, prod redeploy)
 - KI-1 CLOSED: son@metabolic.dev 401 root cause = account never existed in prod DB (anti-enumeration message). Auth verified end-to-end (bcryptjs $2a$10 write + verify). No code defect.
 - P3-5 smoke (login / session / reports-csv / glucose / meals): 5/6 accounts FULL GREEN on fresh prod build. Transient PS keep-alive drops documented (demo@ recovered; priya@ retry queued). arjun@ removed from smoke list by request (account intact in DB).
