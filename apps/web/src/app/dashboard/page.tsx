@@ -3,9 +3,15 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { authOptions } from '@/lib/auth';
 import { loadDashboardData } from '@/lib/engine-service';
+import { greetingForHour, istDayBounds, istHour, relativeTime, sourceLabel } from '@/lib/dashboard-stamp';
 import AppShell from '@/components/AppShell';
 import HealthScoreRing from '@/components/dashboard/HealthScoreRing';
-import { GlucoseChart, WeightChart, ForecastChart } from '@/components/dashboard/Charts';
+import MetricCardsRow from '@/components/dashboard/MetricCards';
+import GlucoseTodayChart from '@/components/dashboard/GlucoseTodayChart';
+import WhyHighCard from '@/components/dashboard/WhyHighCard';
+import MetabolicTimeline from '@/components/dashboard/MetabolicTimeline';
+import SuggestionsCard from '@/components/dashboard/SuggestionsCard';
+import { WeightForecastChart } from '@/components/dashboard/Charts';
 import { REGION_LABELS } from '@mi/food-db';
 import { getPendingCheckIns } from '@/lib/pairing';
 import CheckInCard from '@/components/CheckInCard';
@@ -25,7 +31,7 @@ export default async function DashboardPage() {
   ]);
   if (!data) redirect('/onboarding');
 
-  const { healthScore: hs, dailySummary: daily, profile, sensitivity, isPrior } = data;
+  const { healthScore: hs, profile, sensitivity, isPrior, updatedStamp, metricCards } = data;
   const sub = hs.components;
   const latestWeight = data.weightSeries.at(-1)?.kg ?? profile.weightKg;
   const forecastWeight = data.forecast.filter((p) => p.metric === 'weight_kg');
@@ -33,33 +39,21 @@ export default async function DashboardPage() {
   return (
     <AppShell>
       <div className="mx-auto max-w-6xl">
-        {/* Hero banner (P7-b): the page's one eager image (pre-optimized WebP,
-            125KB). The gradient scrim keeps the greeting readable over any part
-            of the photo, in light and dark schemes alike. */}
-        <div className="relative mb-6 h-40 overflow-hidden rounded-2xl sm:h-52">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/images/hero-dashboard.webp"
-            alt="Fresh, colorful Indian meal spread"
-            width={1344}
-            height={768}
-            loading="eager"
-            fetchPriority="high"
-            decoding="async"
-            className="absolute inset-0 h-full w-full object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/55 to-transparent" aria-hidden="true" />
-          <div className="absolute inset-x-0 bottom-0 p-4 sm:p-5">
-            <p className="text-lg font-semibold text-white sm:text-xl">Eat well, log simply, feel clearer.</p>
-            <p className="mt-0.5 text-sm text-white/85">Your foods, labs and habits - one calm place.</p>
-          </div>
-        </div>
-
-        {/* Header */}
+        {/* Header (dashboard revamp v1): greeting + honest "Updated <time> · <source>"
+            stamp replace the old hero banner. The stamp is the most recent of the
+            user's own records, recomputed on every render - QuickAdd saves already
+            trigger router.refresh(), so it stays current without any fake liveness. */}
         <div className="mb-6 flex flex-wrap items-end justify-between gap-2">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Your metabolic dashboard</h1>
-            <p className="text-sm text-neutral-500">
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {greetingForHour(istHour(Date.now()))}, {session.user.name || 'there'}
+            </h1>
+            <p className="mt-0.5 text-sm text-neutral-500">
+              {updatedStamp
+                ? <>Updated {relativeTime(updatedStamp.t, Date.now())} · {sourceLabel(updatedStamp.kind, updatedStamp.source)}</>
+                : 'No entries yet — your first log will show up here.'}
+            </p>
+            <p className="mt-1 text-xs text-neutral-400">
               {REGION_LABELS[profile.region]} model · sensitivity {sensitivity.toFixed(2)} mg/dL per g carb
               {isPrior ? <span className="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] text-amber-700 dark:bg-amber-950 dark:text-amber-300">prior</span>
                 : <span className="ml-1 rounded-full bg-brand-100 px-2 py-0.5 text-[10px] text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">learned</span>}
@@ -79,9 +73,21 @@ export default async function DashboardPage() {
 
         <QuickAdd />
 
-        {/* Top row: score + daily summary */}
-        <div className="grid gap-4 lg:grid-cols-3">
-          <Card title="Metabolic Health Score" subtitle="0–100 composite · last 14 days" className="lg:col-span-1">
+        {/* Six metric cards (dashboard revamp item 2): every "usual" is the
+            user's own history, every card carries its source/updated stamp. */}
+        <MetricCardsRow cards={metricCards} now={Date.now()} />
+
+        {/* Charts row: glucose chart + "Why was it high?" (revamp items 3-4) */}
+        <div className="mt-4 grid gap-4 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <GlucoseTodayChart chart={data.glucoseChart} />
+          </div>
+          <WhyHighCard attribution={data.attribution} glucose={metricCards.glucose} />
+        </div>
+
+        {/* Score + forecast + insights (score moved beside them by the v1 layout) */}
+        <div className="mt-4 grid gap-4 lg:grid-cols-3">
+          <Card title="Metabolic Health Score" subtitle="0–100 composite · last 14 days">
             <div className="flex items-center gap-4">
               <HealthScoreRing score={hs.score} />
               <div className="flex-1 space-y-1.5 text-xs">
@@ -95,44 +101,21 @@ export default async function DashboardPage() {
             </div>
           </Card>
 
-          <Card title="Today" subtitle="Daily summary" className="lg:col-span-2">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Stat label="Calories" value={`${Math.round(daily.kcal)}`} unit="kcal" />
-              <Stat label="Carbs" value={`${daily.carbsG}`} unit="g" />
-              <Stat label="Protein" value={`${daily.proteinG}`} unit="g" />
-              <Stat label="Fat" value={`${daily.fatG}`} unit="g" />
-              <Stat label="Steps" value={`${Math.round(daily.steps)}`} />
-              <Stat label="Sleep" value={daily.sleepHours.toFixed(1)} unit="h" />
-              <Stat
-                label="Glucose"
-                value={daily.glucoseReadings.at(-1) ? `${daily.glucoseReadings.at(-1)!.value}` : '—'}
-                unit="mg/dL"
-              />
-              <Stat label="Weight" value={latestWeight.toFixed(1)} unit="kg" />
-            </div>
-          </Card>
-        </div>
-
-        {/* Charts row */}
-        <div className="mt-4 grid gap-4 lg:grid-cols-3">
-          <Card title="Glucose trend" subtitle="14-day series with target band" className="lg:col-span-2">
-            <GlucoseChart data={data.glucoseSeries} />
-          </Card>
-          <Card title="Weight trend" subtitle={`${latestWeight.toFixed(1)} kg`}>
-            <WeightChart data={data.weightSeries} />
-          </Card>
-        </div>
-
-        {/* Forecast + insights */}
-        <div className="mt-4 grid gap-4 lg:grid-cols-3">
-          <Card title="30-day weight forecast" subtitle="With confidence interval · educational" className="lg:col-span-2">
-            <ForecastChart data={forecastWeight} />
+          <Card
+            title="Weight & forecast"
+            subtitle={
+              metricCards.weight.delta30d !== null
+                ? `${latestWeight.toFixed(1)} kg · ${metricCards.weight.delta30d > 0 ? '+' : '−'}${Math.abs(metricCards.weight.delta30d).toFixed(1)} kg over 30 days`
+                : `${latestWeight.toFixed(1)} kg`
+            }
+          >
+            <WeightForecastChart history={data.weightSeries} forecast={forecastWeight} now={Date.now()} />
             <p className="mt-2 text-xs text-neutral-500">
-              Based on your recent energy balance. Shaded band = model uncertainty.
+              Measured history + 30-day model projection. Shaded band = model uncertainty.
             </p>
           </Card>
 
-          <Card title="Personal insights" subtitle="Auto-discovered from your data">
+          <Card title="Personal insights" subtitle="from your records · every claim traceable">
             {data.insights.length === 0 ? (
               <p className="text-sm text-neutral-500">Keep logging meals, sleep, and glucose — insights appear after a few days.</p>
             ) : (
@@ -156,50 +139,10 @@ export default async function DashboardPage() {
           </Card>
         </div>
 
-        {/* AI Daily Recommendations */}
+        {/* Today's suggestions (revamp item 6): pattern-derived, evidence-inline,
+            replacing the old hardcoded AI Daily Recommendations card. */}
         <div className="mt-4">
-          <Card title="AI Daily Recommendations" subtitle="Based on your metabolism and current stats">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="rounded-xl border border-brand-100 bg-brand-50 p-4 dark:border-brand-900/50 dark:bg-brand-950/20">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-lg">🥗</span>
-                  <h3 className="font-semibold text-brand-900 dark:text-brand-100">Suggested Meals</h3>
-                </div>
-                <p className="text-sm text-brand-800 dark:text-brand-300 mb-3">
-                  To keep your glucose stable today, your model suggests these {REGION_LABELS[profile.region]} options:
-                </p>
-                <ul className="space-y-2 text-sm text-brand-700 dark:text-brand-400">
-                  <li className="flex items-center gap-2">
-                    <span className="h-1.5 w-1.5 rounded-full bg-brand-500"></span>
-                    <span>1 Katori Dal with 1 Chapati</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="h-1.5 w-1.5 rounded-full bg-brand-500"></span>
-                    <span>Moong Dal Chilla (Pesarattu)</span>
-                  </li>
-                </ul>
-              </div>
-              <div className="rounded-xl border border-sky-100 bg-sky-50 p-4 dark:border-sky-900/50 dark:bg-sky-950/20">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-lg">👟</span>
-                  <h3 className="font-semibold text-sky-900 dark:text-sky-100">Activity Target</h3>
-                </div>
-                <p className="text-sm text-sky-800 dark:text-sky-300 mb-3">
-                  Your activity score is {Math.round(sub.activity)}. To offset predicted dinner spikes, aim for:
-                </p>
-                <ul className="space-y-2 text-sm text-sky-700 dark:text-sky-400">
-                  <li className="flex items-center gap-2">
-                    <span className="h-1.5 w-1.5 rounded-full bg-sky-500"></span>
-                    <span>15 min brisk walk after dinner</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="h-1.5 w-1.5 rounded-full bg-sky-500"></span>
-                    <span>Avoid sitting for &gt; 2 hours</span>
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </Card>
+          <SuggestionsCard suggestions={data.suggestions} today={istDayBounds(Date.now()).dateStr} />
         </div>
 
         {/* Seasonal guidance (U14 Ritucharya) */}
@@ -208,41 +151,21 @@ export default async function DashboardPage() {
         {/* Agni rhythm (P4c-b U17) */}
         <AgniRhythmCard userId={session.user.id} />
 
-        {/* Health timeline */}
-        <Card title="Health timeline" subtitle="Last 24 hours" className="mt-4">
-          {data.timeline.length === 0 ? (
-            <p className="text-sm text-neutral-500">Nothing logged in the last 24 hours.</p>
-          ) : (
-            <ol className="relative space-y-3 border-l border-neutral-200 pl-4 dark:border-neutral-800">
-              {data.timeline.slice(0, 10).map((ev, i) => (
-                <li key={i} className="relative">
-                  <span className={`absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full ${dotColor(ev.type)}`} />
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">{ev.label}</span>
-                    <span className="text-xs text-neutral-400">
-                      {new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true }).format(new Date(ev.t))}
-                    </span>
-                  </div>
-                  {ev.text && <p className="text-xs text-neutral-500">{ev.text}</p>}
-                </li>
-              ))}
-            </ol>
-          )}
-        </Card>
+        {/* Horizontal metabolic timeline (revamp item 5) */}
+        <div className="mt-4">
+          <MetabolicTimeline items={data.metabolicTimeline} />
+        </div>
+
+        {/* Provenance line (revamp item 7, approved v1 footer): everything on
+            this page is the user's own data, and every save re-renders it via
+            router.refresh() (QuickAdd / check-in pattern). Honest statement,
+            not a live-stream claim - nothing here polls. */}
+        <p className="mt-6 text-center text-[11px] text-neutral-400 dark:text-neutral-500">
+          MetabolicInt · data shown is yours, entered manually or imported · values update instantly on save
+        </p>
       </div>
     </AppShell>
   );
-}
-
-function dotColor(type: string): string {
-  switch (type) {
-    case 'meal': return 'bg-brand-500';
-    case 'glucose': return 'bg-amber-500';
-    case 'sleep': return 'bg-indigo-500';
-    case 'activity': return 'bg-sky-500';
-    case 'weight': return 'bg-neutral-500';
-    default: return 'bg-neutral-400';
-  }
 }
 
 function Card({ title, subtitle, children, className = '' }: { title: string; subtitle?: string; children: React.ReactNode; className?: string }) {
@@ -254,17 +177,6 @@ function Card({ title, subtitle, children, className = '' }: { title: string; su
       </div>
       {children}
     </section>
-  );
-}
-
-function Stat({ label, value, unit }: { label: string; value: string; unit?: string }) {
-  return (
-    <div className="rounded-xl border border-neutral-200 p-3 dark:border-neutral-800">
-      <div className="text-xs text-neutral-500">{label}</div>
-      <div className="mt-1 text-lg font-semibold">
-        {value} {unit && <span className="text-xs font-normal text-neutral-400">{unit}</span>}
-      </div>
-    </div>
   );
 }
 

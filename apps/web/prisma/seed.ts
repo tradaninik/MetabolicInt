@@ -162,6 +162,29 @@ async function main() {
     update: {},
   });
 
+  // Dashboard revamp item 2: demo medication schedule + today's taken log +
+  // a stress day-tag, so the "X / Y taken" card, chart event markers and the
+  // attribution card have something true to render. Unconditional upserts —
+  // re-running the seed re-anchors them to the current IST day.
+  const istToday = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
+  const metformin = await prisma.medication.upsert({
+    where: { id: 'demo-metformin-500' },
+    create: { id: 'demo-metformin-500', userId: demo.id, name: 'Metformin 500 mg', scheduleTimes: '["07:30","21:00"]' },
+    update: { scheduleTimes: '["07:30","21:00"]', isActive: true },
+  });
+  await prisma.medicationLog.upsert({
+    where: { medicationId_logDate_slotTime: { medicationId: metformin.id, logDate: istToday, slotTime: '07:30' } },
+    create: { medicationId: metformin.id, userId: demo.id, logDate: istToday, slotTime: '07:30', status: 'taken' },
+    update: { status: 'taken' },
+  });
+  await prisma.dayContextTag.upsert({
+    where: { userId_tagDate_tag: { userId: demo.id, tagDate: istToday, tag: 'stress' } },
+    create: { userId: demo.id, tagDate: istToday, tag: 'stress', note: 'work deadline' },
+    update: { note: 'work deadline' },
+  });
+
   console.log('  ✓ demo user + 14-day history seeded');
 
   // P8: seed the 300-recipe catalog. IRON LAW: every macro column is

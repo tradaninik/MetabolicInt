@@ -29,3 +29,6 @@ export * from './recipe';
 export * from './labs';
 export * from './labReportParser';
 export * from './labCompare';
+export * from './patterns';
+export * from './attribution';
+export * from './suggestions';
