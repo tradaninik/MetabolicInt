@@ -2,6 +2,15 @@
 
 ---
 
+## 2026-10-29 - Session 2, A2: MeasuredDot key-spread console fix
+
+Mission A (dashboard visual fidelity). The only console error on /dashboard (all widths, local + prod) was React's "props object containing a `key` prop is being spread into JSX" from GlucoseTodayChart's dot renderer: recharts passes `key` inside the dot props, and the callback spread `{...p}` into `<MeasuredDot>`.
+
+- Fix: pass `cx`/`cy`/`payload`/`focusT` explicitly instead of the spread (GlucoseTodayChart.tsx:182). Zero behavior change; the focus-reading amber ring and dot sizes are untouched.
+- Gates: 616 passed + 3 skipped (51 files) · tsc ×3 silent · lint = the 3 known `<img>` warnings · build "Compiled successfully" (6 documented pre-existing prisma:no-such-table lines on the empty build DB).
+
+---
+
 ## 2026-10-28 - Dashboard revamp v1 shipped (items 1-7, approved redesign)
 
 The approved dashboard redesign v1, implemented commit-by-commit with all gates green per commit. Zero migration (0006 stays reserved); no package.json changes; engine + food-db gained pure modules only.
