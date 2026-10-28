@@ -9,6 +9,7 @@ import HealthScoreRing from '@/components/dashboard/HealthScoreRing';
 import MetricCardsRow from '@/components/dashboard/MetricCards';
 import GlucoseTodayChart from '@/components/dashboard/GlucoseTodayChart';
 import WhyHighCard from '@/components/dashboard/WhyHighCard';
+import MetabolicTimeline from '@/components/dashboard/MetabolicTimeline';
 import { WeightForecastChart } from '@/components/dashboard/Charts';
 import { REGION_LABELS } from '@mi/food-db';
 import { getPendingCheckIns } from '@/lib/pairing';
@@ -189,41 +190,13 @@ export default async function DashboardPage() {
         {/* Agni rhythm (P4c-b U17) */}
         <AgniRhythmCard userId={session.user.id} />
 
-        {/* Health timeline */}
-        <Card title="Health timeline" subtitle="Last 24 hours" className="mt-4">
-          {data.timeline.length === 0 ? (
-            <p className="text-sm text-neutral-500">Nothing logged in the last 24 hours.</p>
-          ) : (
-            <ol className="relative space-y-3 border-l border-neutral-200 pl-4 dark:border-neutral-800">
-              {data.timeline.slice(0, 10).map((ev, i) => (
-                <li key={i} className="relative">
-                  <span className={`absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full ${dotColor(ev.type)}`} />
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">{ev.label}</span>
-                    <span className="text-xs text-neutral-400">
-                      {new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true }).format(new Date(ev.t))}
-                    </span>
-                  </div>
-                  {ev.text && <p className="text-xs text-neutral-500">{ev.text}</p>}
-                </li>
-              ))}
-            </ol>
-          )}
-        </Card>
+        {/* Horizontal metabolic timeline (revamp item 5) */}
+        <div className="mt-4">
+          <MetabolicTimeline items={data.metabolicTimeline} />
+        </div>
       </div>
     </AppShell>
   );
-}
-
-function dotColor(type: string): string {
-  switch (type) {
-    case 'meal': return 'bg-brand-500';
-    case 'glucose': return 'bg-amber-500';
-    case 'sleep': return 'bg-indigo-500';
-    case 'activity': return 'bg-sky-500';
-    case 'weight': return 'bg-neutral-500';
-    default: return 'bg-neutral-400';
-  }
 }
 
 function Card({ title, subtitle, children, className = '' }: { title: string; subtitle?: string; children: React.ReactNode; className?: string }) {

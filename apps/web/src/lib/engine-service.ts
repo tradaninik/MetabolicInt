@@ -107,6 +107,19 @@ export interface GlucoseChartToday {
   focusT: number | null;
 }
 
+/** Horizontal timeline item (revamp item 5): one card per today's event. */
+export interface TimelineItem {
+  t: number;
+  kind: 'wake' | 'med' | 'meal' | 'activity' | 'glucose' | 'context';
+  title: string;
+  detail: string;
+  planned: boolean;
+  /** the latest above-usual reading gets the yellow highlight */
+  focus: boolean;
+  /** where tapping the card takes you (edit/inspect) */
+  href: string;
+}
+
 export interface GlucoseChartData {
   today: GlucoseChartToday;
   week: { t: number; value: number }[];
@@ -132,11 +145,12 @@ export interface DashboardData {
     sleepHours: number;
     glucoseReadings: { value: number; takenAt: number }[];
   };
-  timeline: { t: number; label: string; type: 'meal' | 'glucose' | 'sleep' | 'activity' | 'weight'; value?: number; text?: string }[];
   /** glucose chart data (revamp item 3): today + events + forecast, week, 14d */
   glucoseChart: GlucoseChartData;
   /** "Why was it high?" attribution (revamp item 4) */
   attribution: AttributionResult;
+  /** horizontal "Today's metabolic timeline" (revamp item 5) */
+  metabolicTimeline: TimelineItem[];
   weightSeries: { t: number; kg: number }[];
   insights: ReturnType<typeof discoverInsights>;
   forecast: ReturnType<typeof forecast>;
@@ -259,8 +273,6 @@ export async function loadDashboardData(userId: string): Promise<DashboardData |
     greenMealFraction: greenFraction,
   });
 
-  const since = Date.now() - DAY;
-  const timeline = buildTimeline(user, since, foodIndex);
   // --- Dashboard revamp item 2: six metric cards --------------------------
   // Every "usual" below is the user's OWN history (patterns.ts), never a
   // population reference, and every card carries its evidence count. The
@@ -480,6 +492,83 @@ export async function loadDashboardData(userId: string): Promise<DashboardData |
           .map((t) => ({ tag: t.tag, note: t.note ?? undefined })),
       })
     : { triggered: false, rows: [], totalEvidence: 0 };
+
+  // --- Dashboard revamp item 5: horizontal "Today's metabolic timeline" ----
+  // The same IST-day events as the chart (single source of truth), plus the
+  // wake entry and the glucose readings, each linked to its edit page.
+  const metabolicTimeline: TimelineItem[] = [];
+  const lastSleep = user.sleepEntries[0];
+  if (lastSleep && lastSleep.wokeAt.getTime() >= istDay.start && lastSleep.wokeAt.getTime() < istDay.end) {
+    metabolicTimeline.push({
+      t: lastSleep.wokeAt.getTime(),
+      kind: 'wake',
+      title: 'Wake',
+      detail: `${lastSleep.hours.toFixed(1)} h sleep`,
+      planned: false,
+      focus: false,
+      href: '/log',
+    });
+  }
+  for (const e of chartEvents) {
+    if (e.kind === 'meal') {
+      const slot = mealSlotForHour(istHour(e.t));
+      metabolicTimeline.push({
+        t: e.t,
+        kind: 'meal',
+        title: slot.charAt(0).toUpperCase() + slot.slice(1),
+        detail: `${e.label} · ${e.detail ?? ''}`.trim(),
+        planned: e.planned,
+        focus: false,
+        href: '/log',
+      });
+    } else if (e.kind === 'dose') {
+      metabolicTimeline.push({
+        t: e.t,
+        kind: 'med',
+        title: e.label,
+        detail: e.planned ? 'planned' : (e.detail ?? ''),
+        planned: e.planned,
+        focus: false,
+        href: '/meds',
+      });
+    } else if (e.kind === 'activity') {
+      metabolicTimeline.push({
+        t: e.t,
+        kind: 'activity',
+        title: e.label.split(' ')[0].replace(/^\w/, (c) => c.toUpperCase()),
+        detail: `${e.label.split(' ').slice(1).join(' ')} · logged`,
+        planned: e.planned,
+        focus: false,
+        href: '/log',
+      });
+    } else {
+      metabolicTimeline.push({
+        t: e.t,
+        kind: 'context',
+        title: e.label.includes('Stress') ? 'Stress note' : e.label,
+        detail: e.detail ?? e.label,
+        planned: e.planned,
+        focus: false,
+        href: '/log',
+      });
+    }
+  }
+  for (const r of todayReadings) {
+    const above =
+      r.dev !== null && r.usualN >= MIN_PATTERN_N && r.dev >= DEVIATION_ALERT_MGDL
+        ? ' · above usual'
+        : '';
+    metabolicTimeline.push({
+      t: r.t,
+      kind: 'glucose',
+      title: 'Glucose',
+      detail: `${Math.round(r.value)} mg/dL${above}`,
+      planned: false,
+      focus: r.t === metricCards.glucose.latest?.takenAt && metricCards.glucose.alert,
+      href: '/glucose',
+    });
+  }
+  metabolicTimeline.sort((a, b) => a.t - b.t);
   const weightSeries = user.weightEntries
     .map((w) => ({ t: w.takenAt.getTime(), kg: w.kg }))
     .sort((a, b) => a.t - b.t);
@@ -525,41 +614,14 @@ export async function loadDashboardData(userId: string): Promise<DashboardData |
     metricCards,
     healthScore: hs,
     dailySummary: daily,
-    timeline,
     glucoseChart,
     attribution,
+    metabolicTimeline,
     weightSeries,
     insights,
     forecast: fc,
     risks,
   };
-}
-
-function buildTimeline(user: any, since: number, foodIndex: Record<string, Food>) {
-  const events: DashboardData['timeline'] = [];
-  for (const m of user.foodEntries) {
-    const t = m.loggedAt.getTime();
-    if (t < since) continue;
-    const food = foodIndex[m.foodId];
-    events.push({ t, type: 'meal', label: food?.name ?? m.foodId, text: `${Math.round(m.kcal)} kcal - ${m.carbsG}g carbs` });
-  }
-  for (const g of user.glucoseReadings) {
-    const t = g.takenAt.getTime();
-    if (t < since) continue;
-    events.push({ t, type: 'glucose', label: `Glucose ${g.value} mg/dL`, value: g.value });
-  }
-  for (const s of user.sleepEntries.slice(0, 1)) {
-    events.push({ t: s.wokeAt.getTime() - 7 * 3600_000, type: 'sleep', label: `Slept ${s.hours.toFixed(1)}h`, value: s.hours });
-  }
-  for (const a of user.activityEntries) {
-    const t = a.at.getTime();
-    if (t < since) continue;
-    events.push({ t, type: 'activity', label: `${a.type} ${a.durationMin}min` });
-  }
-  for (const w of user.weightEntries.slice(0, 1)) {
-    events.push({ t: w.takenAt.getTime(), type: 'weight', label: `${w.kg} kg`, value: w.kg });
-  }
-  return events.sort((a, b) => b.t - a.t);
 }
 
 function profileTdee(p: UserProfile): number {
