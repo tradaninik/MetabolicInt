@@ -2,6 +2,16 @@
 
 ---
 
+## 2026-10-29 - Session 2, B-history: retake history + deltas on the results page (B0-8)
+
+Mission B step 4. Rows already existed and are indexed — this is UI only, zero schema/API change (GET has returned history[] since the B-API commit).
+
+- PrakritiQuiz captures `history` from the GET payload; after a successful retake it re-runs load() so the latest profile and history always come from the same GET (single source of truth; the POST response is no longer used for state).
+- PrakritiResult renders "Your assessment history": newest first, date + no-dominance label + V/P/K counts, the newest tagged "latest", and every older attempt shows "vs previous: V +n · P −n · K ±0" deltas against the attempt just newer than it. Single-attempt accounts get the honest "every retake is kept" line instead of an empty list.
+- Gates: 619 passed + 3 skipped · tsc ×3 silent · lint = the 3 known `<img>` warnings · build "Compiled successfully".
+
+---
+
 ## 2026-10-29 - Session 2, B-results: Know Your Body results page rebuilt (B0-1/2/4/5/6/7/9 + safety copy)
 
 Mission B step 3. The old result view ("Your profile: Vata primary · Pitta secondary" + 3 static bars) is replaced by a full results page. New components: PrakritiResult.tsx (client) + lib/ayurveda-content.ts (static, clearly-labelled traditional copy).

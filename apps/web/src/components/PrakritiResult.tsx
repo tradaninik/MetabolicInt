@@ -12,6 +12,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { DOSHA_INFO, TRADITION_REFLECTIONS, topDoshas, type DoshaKey } from '@/lib/ayurveda-content';
+import type { HistoryItem } from './PrakritiQuiz';
 
 export interface ProfileView {
   answers: Record<string, string>;
@@ -41,9 +42,10 @@ function istTaken(takenAt: string): string {
 }
 
 export default function PrakritiResult({
-  profile, quizVersion, onRetake,
+  profile, history, quizVersion, onRetake,
 }: {
   profile: ProfileView;
+  history: HistoryItem[];
   quizVersion: number | null;
   onRetake: () => void;
 }) {
@@ -123,6 +125,49 @@ export default function PrakritiResult({
         Shares describe your answers, not your body&rsquo;s biology — this is not a &ldquo;how much of you is Vata&rdquo; percentage.
         Self-reported answers — not medical measurements.
       </p>
+
+      {/* Assessment history + deltas vs the previous attempt (B0-8) */}
+      <h3 className="mt-6 text-sm font-semibold">Your assessment history</h3>
+      {history.length <= 1 ? (
+        <p className="mt-1 text-xs text-neutral-500">
+          Every retake is kept — take the quiz again after a few weeks and both attempts will sit here side by side.
+        </p>
+      ) : (
+        <ul className="mt-2 space-y-1.5">
+          {history.map((h, i) => {
+            const prev = i > 0 ? history[i - 1] : null;
+            const delta = (a: number, b?: number) =>
+              prev && b !== undefined ? a - b : null;
+            const dv = delta(h.vata, prev?.vata);
+            const dp = delta(h.pitta, prev?.pitta);
+            const dk = delta(h.kapha, prev?.kapha);
+            const fmt = (d: number | null) =>
+              d === null ? '' : d === 0 ? '±0' : d > 0 ? `+${d}` : `${d}`;
+            return (
+              <li
+                key={h.takenAt}
+                className="flex flex-wrap items-baseline justify-between gap-x-3 rounded-lg border border-neutral-200 px-3 py-2 text-xs dark:border-neutral-800"
+              >
+                <span className="text-neutral-500">{istTaken(h.takenAt)}</span>
+                <span className="font-medium">{h.profileLabel ?? `${h.vata}/${h.pitta}/${h.kapha}`}</span>
+                <span className="tabular-nums text-neutral-500">
+                  V {h.vata} · P {h.pitta} · K {h.kapha}
+                </span>
+                {prev && (
+                  <span className="tabular-nums text-neutral-400" title="Change vs the newer attempt">
+                    vs previous: V {fmt(dv)} · P {fmt(dp)} · K {fmt(dk)}
+                  </span>
+                )}
+                {i === 0 && (
+                  <span className="rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
+                    latest
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
 
       {/* What this tradition suggests (B0-6) */}
       <h3 className="mt-6 text-sm font-semibold">What this tradition suggests</h3>

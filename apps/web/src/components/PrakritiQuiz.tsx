@@ -12,12 +12,26 @@ interface QuizQuestion {
 
 // S2-B: ProfileView moved to PrakritiResult (gains profileLabel/isTie).
 // The quiz keeps quizVersion around so the result can say "based on the
-// current questionnaire (v1)".
+// current questionnaire (v1)". history comes from the GET payload (newest
+// first, latest 10) — after a retake we re-load so the list stays truthful.
+
+export interface HistoryItem {
+  takenAt: string;
+  vata: number;
+  pitta: number;
+  kapha: number;
+  vataPct?: number;
+  pittaPct?: number;
+  kaphaPct?: number;
+  profileLabel?: string;
+  isTie?: boolean;
+}
 
 export default function PrakritiQuiz() {
   const [state, setState] = useState<'loading' | 'quiz' | 'result' | 'error'>('loading');
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [profile, setProfile] = useState<ProfileView | null>(null);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
   const [quizVersion, setQuizVersion] = useState<number | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -31,6 +45,7 @@ export default function PrakritiQuiz() {
       const data = await res.json();
       setQuestions(data.questions ?? []);
       setProfile(data.profile ?? null);
+      setHistory(Array.isArray(data.history) ? data.history : []);
       setQuizVersion(typeof data.quizVersion === 'number' ? data.quizVersion : null);
       setAnswers(data.profile?.answers ?? {});
       setState(data.profile ? 'result' : 'quiz');
@@ -53,9 +68,9 @@ export default function PrakritiQuiz() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? 'Could not save your answers.');
-      setProfile(data.profile);
-      if (typeof data.quizVersion === 'number') setQuizVersion(data.quizVersion);
-      setState('result');
+      // Re-load so the history list and latest profile both come from the
+      // same GET (single source of truth; the POST response is not used for state).
+      await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.');
     } finally {
@@ -70,6 +85,7 @@ export default function PrakritiQuiz() {
     return (
       <PrakritiResult
         profile={profile}
+        history={history}
         quizVersion={quizVersion}
         onRetake={() => { setAnswers({}); setState('quiz'); }}
       />
