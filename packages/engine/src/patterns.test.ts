@@ -12,6 +12,7 @@ import {
   stepsContext,
   stepsFromActivity,
   timeInRange,
+  usualDailyCurve,
   usualPatternAt,
   weightContext,
   type ReadingPoint,
@@ -303,5 +304,64 @@ describe('mealSlotForHour', () => {
     expect(mealSlotForHour(20)).toBe('dinner');
     expect(mealSlotForHour(2)).toBe('dinner'); // late night counts as after-dinner
     expect(mealSlotForHour(5)).toBe('breakfast');
+  });
+});
+
+describe('usualDailyCurve', () => {
+  // Readings every prior day at 14:00 UTC (140s) and 00:00 UTC (180s).
+  const mkReadings = (days: number): ReadingPoint[] => {
+    const out: ReadingPoint[] = [];
+    for (let d = 1; d <= days; d++) {
+      out.push(reading(140, NOW - d * DAY)); // 14:00 on prior days
+      out.push(reading(180, NOW - d * DAY - 14 * HOUR)); // 00:00 on prior days
+    }
+    return out;
+  };
+  // hour marks for "today" 06:00..23:00 UTC → anchored: 11-17 (near 14:00)
+  // and 21-23 (near 00:00, circular); interpolated: 18-20; null: 6-10.
+  const hours = Array.from({ length: 18 }, (_, i) => Date.UTC(2024, 5, 15, 6 + i, 0, 0));
+  const curveOf = (rs: ReadingPoint[]) => usualDailyCurve(rs, hours, { now: NOW });
+
+  it('direct points carry the median with n>0 and a band', () => {
+    const curve = curveOf(mkReadings(7));
+    const h14 = curve.find((p) => new Date(p.at).getUTCHours() === 14)!;
+    expect(h14.n).toBeGreaterThan(0);
+    expect(h14.value).toBeGreaterThan(130);
+    expect(h14.interpolated).toBe(false);
+    expect(h14.low).toBeLessThan(h14.value!);
+    expect(h14.high).toBeGreaterThan(h14.value!);
+  });
+
+  it('hours with no left/right anchor make no claim (null value)', () => {
+    const curve = curveOf(mkReadings(7));
+    const h6 = curve.find((p) => new Date(p.at).getUTCHours() === 6)!;
+    expect(h6.value).toBeNull();
+    expect(h6.low).toBeNull();
+    expect(h6.high).toBeNull();
+  });
+
+  it('interpolates between anchored hours with a wider band and n=0', () => {
+    const curve = curveOf(mkReadings(7));
+    const h19 = curve.find((p) => new Date(p.at).getUTCHours() === 19)!;
+    expect(h19.interpolated).toBe(true);
+    expect(h19.n).toBe(0);
+    expect(h19.value).not.toBeNull();
+    expect(h19.value!).toBeGreaterThan(140); // between the 140s and the 180s
+    expect(h19.value!).toBeLessThan(180);
+    const bandMid = h19.high! - h19.value!;
+    const anchored = curve.find((p) => new Date(p.at).getUTCHours() === 14)!;
+    expect(bandMid).toBeGreaterThan(anchored.high! - anchored.value!);
+  });
+
+  it('returns an all-null curve when there is no history at all', () => {
+    const curve = curveOf([]);
+    expect(curve.every((p) => p.value === null)).toBe(true);
+  });
+
+  it("excludes today's readings from its own forecast basis", () => {
+    const withToday = [...mkReadings(7), reading(400, NOW - HOUR)];
+    const curve = curveOf(withToday);
+    const h14 = curve.find((p) => new Date(p.at).getUTCHours() === 14)!;
+    expect(h14.value).toBeLessThan(200); // today's 400 did not drag the usual up
   });
 });

@@ -16,6 +16,7 @@ import {
   stepsContext,
   stepsFromActivity,
   timeInRange,
+  usualDailyCurve,
   usualPatternAt,
   deviationFromUsual,
   weightContext,
@@ -35,8 +36,8 @@ import {
 } from '@mi/engine';
 import { mergedFoodIndex } from './food-index';
 import { latestUpdate, type UpdateCandidate, type UpdateStamp } from './dashboard-stamp';
-import { istHour } from './dashboard-stamp';
-import { istNow } from './clinical-db';
+import { istDayBounds, istHour, istSlotEpoch } from './dashboard-stamp';
+import { DAY_TAG_LABELS, istNow, type DayContextTagValue } from './clinical-db';
 
 const DAY = 86_400_000;
 
@@ -82,6 +83,34 @@ export interface MetricCards {
   meds: MedsToday;
 }
 
+/** Chart event marker (revamp item 3): meals, doses, activity, context tags. */
+export interface ChartEvent {
+  t: number;
+  kind: 'meal' | 'dose' | 'activity' | 'context';
+  label: string;
+  detail?: string;
+  /** planned = scheduled but not yet done (dashed marker; no claim made) */
+  planned: boolean;
+}
+
+/** Today view: IST-day readings + events + dashed model forecast. */
+export interface GlucoseChartToday {
+  dayStart: number;
+  dayEnd: number;
+  readings: { t: number; value: number; dev: number | null; usualN: number }[];
+  events: ChartEvent[];
+  /** usual-pattern forecast from the last reading to end of day; band = uncertainty */
+  forecast: { t: number; value: number | null; band: [number, number] | null }[];
+  /** the reading the page is explaining (latest), for the highlight ring */
+  focusT: number | null;
+}
+
+export interface GlucoseChartData {
+  today: GlucoseChartToday;
+  week: { t: number; value: number }[];
+  fortnight: { t: number; value: number }[];
+}
+
 export interface DashboardData {
   profile: UserProfile;
   sensitivity: number;
@@ -102,7 +131,8 @@ export interface DashboardData {
     glucoseReadings: { value: number; takenAt: number }[];
   };
   timeline: { t: number; label: string; type: 'meal' | 'glucose' | 'sleep' | 'activity' | 'weight'; value?: number; text?: string }[];
-  glucoseSeries: { t: number; value: number }[];
+  /** glucose chart data (revamp item 3): today + events + forecast, week, 14d */
+  glucoseChart: GlucoseChartData;
   weightSeries: { t: number; kg: number }[];
   insights: ReturnType<typeof discoverInsights>;
   forecast: ReturnType<typeof forecast>;
@@ -227,7 +257,6 @@ export async function loadDashboardData(userId: string): Promise<DashboardData |
 
   const since = Date.now() - DAY;
   const timeline = buildTimeline(user, since, foodIndex);
-
   // --- Dashboard revamp item 2: six metric cards --------------------------
   // Every "usual" below is the user's OWN history (patterns.ts), never a
   // population reference, and every card carries its evidence count.
@@ -311,10 +340,90 @@ export async function loadDashboardData(userId: string): Promise<DashboardData |
     ),
   };
 
-  const glucoseSeries = user.glucoseReadings
-    .map((g) => ({ t: g.takenAt.getTime(), value: g.value }))
-    .filter((p) => p.t >= since - 13 * DAY)
+  // --- Dashboard revamp item 3: glucose chart (today + events + forecast) --
+  // The Today view is anchored to the IST calendar day (the app's audience
+  // timezone and the same convention /api/meds/log uses for slot times).
+  const istDay = istDayBounds(nowMs);
+  const todayReadings = readingsAll
+    .filter((r) => r.takenAt >= istDay.start && r.takenAt < istDay.end)
+    .map((r) => {
+      const u = usualPatternAt(readingsAll, r.takenAt, { now: nowMs });
+      return { t: r.takenAt, value: r.value, dev: deviationFromUsual(r.value, u), usualN: u.n };
+    })
     .sort((a, b) => a.t - b.t);
+
+  const chartEvents: ChartEvent[] = [];
+  for (const m of user.foodEntries) {
+    const t = m.loggedAt.getTime();
+    if (t < istDay.start || t >= istDay.end) continue;
+    chartEvents.push({
+      t,
+      kind: 'meal',
+      label: foodIndex[m.foodId]?.name ?? m.foodId,
+      detail: `${Math.round(m.carbsG)} g carbs`,
+      planned: false, // planned meals arrive with the Phase C planner
+    });
+  }
+  for (const slot of metricCards.meds.slots) {
+    chartEvents.push({
+      t: istSlotEpoch(istDay.dateStr, slot.slotTime),
+      kind: 'dose',
+      label: slot.name,
+      detail: slot.status === 'taken' ? 'taken' : slot.status,
+      planned: slot.status === 'planned',
+    });
+  }
+  for (const a of user.activityEntries) {
+    const t = a.at.getTime();
+    if (t < istDay.start || t >= istDay.end) continue;
+    chartEvents.push({ t, kind: 'activity', label: `${a.type} ${Math.round(a.durationMin)} min`, planned: false });
+  }
+  for (const tag of user.dayTags) {
+    if (tag.tagDate !== istDay.dateStr) continue;
+    chartEvents.push({
+      t: tag.createdAt.getTime(),
+      kind: 'context',
+      label: DAY_TAG_LABELS[tag.tag as DayContextTagValue] ?? tag.tag,
+      detail: tag.note ?? undefined,
+      planned: false,
+    });
+  }
+  chartEvents.sort((a, b) => a.t - b.t);
+
+  // Dashed forecast: the user's usual hour-by-hour pattern (excluding today)
+  // from the last reading to the end of the IST day, with an uncertainty band.
+  const lastReadingToday = todayReadings.at(-1);
+  const glucoseForecast: GlucoseChartToday['forecast'] = [];
+  if (lastReadingToday) {
+    glucoseForecast.push({ t: lastReadingToday.t, value: lastReadingToday.value, band: null });
+    const hourMarks: number[] = [];
+    for (
+      let h = Math.ceil((lastReadingToday.t + 15 * 60_000) / 3_600_000) * 3_600_000;
+      h < istDay.end;
+      h += 3_600_000
+    ) {
+      hourMarks.push(h);
+    }
+    if (hourMarks.length) {
+      for (const p of usualDailyCurve(readingsAll, hourMarks, { now: nowMs })) {
+        if (p.value === null || p.low === null || p.high === null) continue;
+        glucoseForecast.push({ t: p.at, value: p.value, band: [p.low, p.high] });
+      }
+    }
+  }
+
+  const glucoseChart: GlucoseChartData = {
+    today: {
+      dayStart: istDay.start,
+      dayEnd: istDay.end,
+      readings: todayReadings,
+      events: chartEvents,
+      forecast: glucoseForecast,
+      focusT: metricCards.glucose.latest?.takenAt ?? null,
+    },
+    week: readingsAll.filter((r) => r.takenAt >= nowMs - 7 * DAY).map((r) => ({ t: r.takenAt, value: r.value })),
+    fortnight: readingsAll.filter((r) => r.takenAt >= nowMs - 14 * DAY).map((r) => ({ t: r.takenAt, value: r.value })),
+  };
   const weightSeries = user.weightEntries
     .map((w) => ({ t: w.takenAt.getTime(), kg: w.kg }))
     .sort((a, b) => a.t - b.t);
@@ -361,7 +470,7 @@ export async function loadDashboardData(userId: string): Promise<DashboardData |
     healthScore: hs,
     dailySummary: daily,
     timeline,
-    glucoseSeries,
+    glucoseChart,
     weightSeries,
     insights,
     forecast: fc,

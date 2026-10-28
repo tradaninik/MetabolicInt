@@ -7,6 +7,7 @@ import { greetingForHour, istHour, relativeTime, sourceLabel } from '@/lib/dashb
 import AppShell from '@/components/AppShell';
 import HealthScoreRing from '@/components/dashboard/HealthScoreRing';
 import MetricCardsRow from '@/components/dashboard/MetricCards';
+import GlucoseTodayChart from '@/components/dashboard/GlucoseTodayChart';
 import { GlucoseChart, WeightChart, ForecastChart } from '@/components/dashboard/Charts';
 import { REGION_LABELS } from '@mi/food-db';
 import { getPendingCheckIns } from '@/lib/pairing';
@@ -73,11 +74,11 @@ export default async function DashboardPage() {
             user's own history, every card carries its source/updated stamp. */}
         <MetricCardsRow cards={metricCards} now={Date.now()} />
 
-        {/* Charts row */}
+        {/* Charts row: glucose chart (revamp item 3) + weight trend */}
         <div className="mt-4 grid gap-4 lg:grid-cols-3">
-          <Card title="Glucose trend" subtitle="14-day series with target band" className="lg:col-span-2">
-            <GlucoseChart data={data.glucoseSeries} />
-          </Card>
+          <div className="lg:col-span-2">
+            <GlucoseTodayChart chart={data.glucoseChart} />
+          </div>
           <Card title="Weight trend" subtitle={`${latestWeight.toFixed(1)} kg`}>
             <WeightChart data={data.weightSeries} />
           </Card>

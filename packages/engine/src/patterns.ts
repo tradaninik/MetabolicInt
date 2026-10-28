@@ -360,8 +360,85 @@ export function mealSlotForHour(hour: number): MealSlot {
 }
 
 // ---------------------------------------------------------------------------
+// Daily usual curve — the chart's dashed forecast + uncertainty band (item 3)
+// ---------------------------------------------------------------------------
+
+export interface UsualCurvePoint {
+  /** target epoch ms (an hour mark) */
+  at: number;
+  /** usual value at this hour; null only when no data anchors it on either side */
+  value: number | null;
+  low: number | null;
+  high: number | null;
+  /** same-hour readings behind this point (0 = interpolated between hours) */
+  n: number;
+  interpolated: boolean;
+}
+
+/**
+ * The user's usual glucose hour-by-hour across the day, from their own
+ * readings (trailing window, excluding today). Hours without readings are
+ * LINEARLY INTERPOLATED between the nearest hours that have data, with the
+ * uncertainty band widened ~2 mg/dL per hour of interpolation distance —
+ * the band is what keeps sparse-data stretches honest. Hours with no
+ * defined neighbour on either side stay null (no claim).
+ */
+export function usualDailyCurve(
+  readings: ReadingPoint[],
+  hours: number[],
+  opts: { days?: number; windowHours?: number; now?: number; minBand?: number } = {},
+): UsualCurvePoint[] {
+  const days = opts.days ?? 14;
+  const windowHours = opts.windowHours ?? 3;
+  const minBand = opts.minBand ?? 10;
+  const now = opts.now ?? (hours.length ? hours[hours.length - 1] : Date.now());
+  const cutoff = now - days * DAY_MS;
+
+  const direct = hours.map((at) => {
+    const targetMs = at % DAY_MS;
+    const same = readings.filter((r) => {
+      if (r.takenAt >= startOfDay(at)) return false; // exclude the day being explained
+      if (r.takenAt < cutoff) return false;
+      const d = Math.abs((r.takenAt % DAY_MS) - targetMs);
+      return Math.min(d, DAY_MS - d) <= windowHours * HOUR_MS;
+    });
+    const values = same.map((r) => r.value).sort((a, b) => a - b);
+    if (!values.length) return null;
+    const med = median(values)!;
+    const spread = values.length >= 4 ? quartile(values, 0.75) - quartile(values, 0.25) : minBand * 1.2;
+    const band = Math.max(minBand, Math.min(40, spread * 0.75));
+    return { at, value: med, low: med - band, high: med + band, n: values.length, interpolated: false };
+  });
+
+  // Fill the gaps between defined points by linear interpolation, widening
+  // the band with distance from the nearest defined hour.
+  const out: (UsualCurvePoint | null)[] = [...direct];
+  for (let i = 0; i < out.length; i++) {
+    if (out[i]) continue;
+    let lo = -1;
+    for (let j = i - 1; j >= 0; j--) if (out[j]) { lo = j; break; }
+    let hi = -1;
+    for (let j = i + 1; j < out.length; j++) if (out[j]) { hi = j; break; }
+    if (lo < 0 || hi < 0) continue; // no anchor on one side -> stays null-valued
+    const a = out[lo]!;
+    const b = out[hi]!;
+    const f = (i - lo) / (hi - lo);
+    const value = a.value! + (b.value! - a.value!) * f;
+    const distHours = Math.min(i - lo, hi - i);
+    const band = Math.max(a.high! - a.value!, b.high! - b.value!) + 2 * distHours;
+    out[i] = { at: hours[i], value: +value.toFixed(1), low: +(value - band).toFixed(1), high: +(value + band).toFixed(1), n: 0, interpolated: true };
+  }
+  // Unanchored edges become explicit null-valued points (no claim made).
+  return out.map((p, i) => p ?? { at: hours[i], value: null, low: null, high: null, n: 0, interpolated: false });
+}
+
+// ---------------------------------------------------------------------------
 // stats helpers
 // ---------------------------------------------------------------------------
+
+function startOfDay(t: number): number {
+  return t - (t % DAY_MS);
+}
 
 export function median(sorted: number[]): number | null {
   if (!sorted.length) return null;

@@ -85,3 +85,29 @@ export function sourceLabel(kind: UpdateKind, source?: string): string {
   };
   return labels[kind];
 }
+
+// ---------------------------------------------------------------------------
+// IST day + medication-slot clock math (dashboard revamp item 3).
+// Med schedules are stored as IST wall-clock "HH:MM" (same convention as
+// /api/meds/log), so the chart axis and event markers are IST-day based.
+// ---------------------------------------------------------------------------
+
+/** The IST calendar day containing `now`: { start, end } epoch ms + 'YYYY-MM-DD'. */
+export function istDayBounds(now: number): { start: number; end: number; dateStr: string } {
+  const shifted = now + IST_OFFSET_MS;
+  const dayStartShifted = shifted - (shifted % DAY_MS);
+  const dateStr = new Date(dayStartShifted).toISOString().slice(0, 10);
+  return {
+    start: dayStartShifted - IST_OFFSET_MS,
+    end: dayStartShifted - IST_OFFSET_MS + DAY_MS,
+    dateStr,
+  };
+}
+
+/**
+ * Epoch ms of an IST wall-clock time on a given IST date.
+ * Pure: treat the IST time as UTC, then shift back by the offset.
+ */
+export function istSlotEpoch(dateStr: string, hhmm: string): number {
+  return Date.parse(`${dateStr}T${hhmm}:00Z`) - IST_OFFSET_MS;
+}
