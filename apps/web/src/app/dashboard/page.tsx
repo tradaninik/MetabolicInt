@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { authOptions } from '@/lib/auth';
 import { loadDashboardData } from '@/lib/engine-service';
+import { greetingForHour, istHour, relativeTime, sourceLabel } from '@/lib/dashboard-stamp';
 import AppShell from '@/components/AppShell';
 import HealthScoreRing from '@/components/dashboard/HealthScoreRing';
 import { GlucoseChart, WeightChart, ForecastChart } from '@/components/dashboard/Charts';
@@ -25,7 +26,7 @@ export default async function DashboardPage() {
   ]);
   if (!data) redirect('/onboarding');
 
-  const { healthScore: hs, dailySummary: daily, profile, sensitivity, isPrior } = data;
+  const { healthScore: hs, dailySummary: daily, profile, sensitivity, isPrior, updatedStamp } = data;
   const sub = hs.components;
   const latestWeight = data.weightSeries.at(-1)?.kg ?? profile.weightKg;
   const forecastWeight = data.forecast.filter((p) => p.metric === 'weight_kg');
@@ -33,33 +34,21 @@ export default async function DashboardPage() {
   return (
     <AppShell>
       <div className="mx-auto max-w-6xl">
-        {/* Hero banner (P7-b): the page's one eager image (pre-optimized WebP,
-            125KB). The gradient scrim keeps the greeting readable over any part
-            of the photo, in light and dark schemes alike. */}
-        <div className="relative mb-6 h-40 overflow-hidden rounded-2xl sm:h-52">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/images/hero-dashboard.webp"
-            alt="Fresh, colorful Indian meal spread"
-            width={1344}
-            height={768}
-            loading="eager"
-            fetchPriority="high"
-            decoding="async"
-            className="absolute inset-0 h-full w-full object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/55 to-transparent" aria-hidden="true" />
-          <div className="absolute inset-x-0 bottom-0 p-4 sm:p-5">
-            <p className="text-lg font-semibold text-white sm:text-xl">Eat well, log simply, feel clearer.</p>
-            <p className="mt-0.5 text-sm text-white/85">Your foods, labs and habits - one calm place.</p>
-          </div>
-        </div>
-
-        {/* Header */}
+        {/* Header (dashboard revamp v1): greeting + honest "Updated <time> · <source>"
+            stamp replace the old hero banner. The stamp is the most recent of the
+            user's own records, recomputed on every render - QuickAdd saves already
+            trigger router.refresh(), so it stays current without any fake liveness. */}
         <div className="mb-6 flex flex-wrap items-end justify-between gap-2">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Your metabolic dashboard</h1>
-            <p className="text-sm text-neutral-500">
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {greetingForHour(istHour(Date.now()))}, {session.user.name || 'there'}
+            </h1>
+            <p className="mt-0.5 text-sm text-neutral-500">
+              {updatedStamp
+                ? <>Updated {relativeTime(updatedStamp.t, Date.now())} · {sourceLabel(updatedStamp.kind, updatedStamp.source)}</>
+                : 'No entries yet — your first log will show up here.'}
+            </p>
+            <p className="mt-1 text-xs text-neutral-400">
               {REGION_LABELS[profile.region]} model · sensitivity {sensitivity.toFixed(2)} mg/dL per g carb
               {isPrior ? <span className="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] text-amber-700 dark:bg-amber-950 dark:text-amber-300">prior</span>
                 : <span className="ml-1 rounded-full bg-brand-100 px-2 py-0.5 text-[10px] text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">learned</span>}

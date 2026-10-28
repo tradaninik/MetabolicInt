@@ -18,6 +18,7 @@ import {
   type Food,
 } from '@mi/engine';
 import { mergedFoodIndex } from './food-index';
+import { latestUpdate, type UpdateCandidate, type UpdateStamp } from './dashboard-stamp';
 
 const DAY = 86_400_000;
 
@@ -45,6 +46,8 @@ export interface DashboardData {
   sensitivity: number;
   isPrior: boolean;
   sampleSize: number;
+  /** most recent of the user's own records - powers the header stamp (revamp item 1) */
+  updatedStamp: UpdateStamp | null;
   healthScore: ReturnType<typeof computeHealthScore>;
   dailySummary: {
     kcal: number;
@@ -83,7 +86,7 @@ export async function loadDashboardData(userId: string): Promise<DashboardData |
         glucoseReadings: {
           orderBy: { takenAt: 'desc' },
           take: 200,
-          select: { value: true, takenAt: true },
+          select: { value: true, takenAt: true, source: true },
         },
         weightEntries: {
           orderBy: { takenAt: 'desc' },
@@ -179,6 +182,20 @@ export async function loadDashboardData(userId: string): Promise<DashboardData |
   }));
   const insights = discoverInsights({ sleep, glucose, meals, weights, foodIndex });
 
+  // Dashboard revamp item 1: header "Updated <time> · <source>" stamp. The most
+  // recent of the user's own records across every stream the dashboard reads -
+  // honest provenance, recomputed on every render (no fake liveness). All the
+  // relations above are ordered desc, so index 0 is the latest of each stream.
+  const stampCandidates: UpdateCandidate[] = [
+    ...user.glucoseReadings.slice(0, 1).map((g) => ({ t: g.takenAt.getTime(), kind: 'glucose' as const, source: g.source })),
+    ...user.foodEntries.slice(0, 1).map((m) => ({ t: m.loggedAt.getTime(), kind: 'meal' as const })),
+    ...user.activityEntries.slice(0, 1).map((a) => ({ t: a.at.getTime(), kind: 'activity' as const })),
+    ...user.sleepEntries.slice(0, 1).map((s) => ({ t: s.wokeAt.getTime(), kind: 'sleep' as const })),
+    ...user.weightEntries.slice(0, 1).map((w) => ({ t: w.takenAt.getTime(), kind: 'weight' as const })),
+    ...user.bpEntries.slice(0, 1).map((b) => ({ t: b.takenAt.getTime(), kind: 'bp' as const })),
+  ];
+  const updatedStamp = latestUpdate(stampCandidates);
+
   const tdeeValue = profileTdee(profile);
   const fc = forecast(profile, {
     avgKcalIntake: Math.max(daily.kcal || 0, tdeeValue * 0.9),
@@ -193,6 +210,7 @@ export async function loadDashboardData(userId: string): Promise<DashboardData |
     sensitivity,
     isPrior,
     sampleSize,
+    updatedStamp,
     healthScore: hs,
     dailySummary: daily,
     timeline,
