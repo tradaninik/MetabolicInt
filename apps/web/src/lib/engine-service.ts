@@ -10,6 +10,22 @@ import {
   priorSensitivity,
   macrosForGrams,
   netCarbsG,
+  mealSlotForHour,
+  medsToday,
+  sleepContext,
+  stepsContext,
+  stepsFromActivity,
+  timeInRange,
+  usualPatternAt,
+  deviationFromUsual,
+  weightContext,
+  DEVIATION_ALERT_MGDL,
+  MIN_PATTERN_N,
+  type TimeInRange,
+  type SleepContext,
+  type StepsContext,
+  type WeightContext,
+  type MedsToday,
   type UserProfile,
   type MealEntry,
   type GlucosePoint,
@@ -19,6 +35,8 @@ import {
 } from '@mi/engine';
 import { mergedFoodIndex } from './food-index';
 import { latestUpdate, type UpdateCandidate, type UpdateStamp } from './dashboard-stamp';
+import { istHour } from './dashboard-stamp';
+import { istNow } from './clinical-db';
 
 const DAY = 86_400_000;
 
@@ -41,6 +59,29 @@ export function toUserProfile(u: {
   return profile;
 }
 
+/** Glucose metric card (revamp item 2): latest reading vs the user's usual. */
+export interface GlucoseCard {
+  latest: { value: number; takenAt: number; source: string } | null;
+  /** the user's own median at this hour-of-day over trailing 14 days */
+  usual: { median: number | null; n: number; spread: number | null };
+  /** latest minus usual median (mg/dL); null when no pattern yet */
+  deviation: number | null;
+  /** |deviation| >= DEVIATION_ALERT_MGDL with enough same-hour history */
+  alert: boolean;
+  /** "2 h after lunch" context for the reading, when a meal preceded it today */
+  afterMeal: { hours: number; slot: string; mealName: string } | null;
+}
+
+/** Everything the six metric cards (revamp item 2) need. */
+export interface MetricCards {
+  glucose: GlucoseCard;
+  timeInRange: TimeInRange;
+  steps: StepsContext & { latestSource: string | null; latestAt: number | null };
+  sleep: SleepContext;
+  weight: WeightContext;
+  meds: MedsToday;
+}
+
 export interface DashboardData {
   profile: UserProfile;
   sensitivity: number;
@@ -48,6 +89,8 @@ export interface DashboardData {
   sampleSize: number;
   /** most recent of the user's own records - powers the header stamp (revamp item 1) */
   updatedStamp: UpdateStamp | null;
+  /** six metric cards (revamp item 2) */
+  metricCards: MetricCards;
   healthScore: ReturnType<typeof computeHealthScore>;
   dailySummary: {
     kcal: number;
@@ -101,7 +144,7 @@ export async function loadDashboardData(userId: string): Promise<DashboardData |
         activityEntries: {
           orderBy: { at: 'desc' },
           take: 60,
-          select: { type: true, durationMin: true, at: true },
+          select: { type: true, durationMin: true, at: true, source: true },
         },
         bpEntries: {
           orderBy: { takenAt: 'desc' },
@@ -110,6 +153,26 @@ export async function loadDashboardData(userId: string): Promise<DashboardData |
         },
         learnedModel: {
           select: { sensitivityMgDlPerGCarb: true, isPrior: true, sampleSize: true },
+        },
+        // Dashboard revamp item 2: the dashboard previously ignored these
+        // streams. Meds -> "X / Y taken" card (+ planned slots for the chart
+        // markers in item 3); day tags -> stress/context events (items 3-4).
+        meds: {
+          where: { isActive: true },
+          select: {
+            id: true,
+            name: true,
+            scheduleTimes: true,
+            logs: {
+              where: { logDate: istNow().slice(0, 10) },
+              select: { slotTime: true, logDate: true, status: true, createdAt: true },
+            },
+          },
+        },
+        dayTags: {
+          orderBy: { createdAt: 'desc' },
+          take: 14,
+          select: { tagDate: true, tag: true, note: true, createdAt: true },
         },
       },
     }),
@@ -165,6 +228,89 @@ export async function loadDashboardData(userId: string): Promise<DashboardData |
   const since = Date.now() - DAY;
   const timeline = buildTimeline(user, since, foodIndex);
 
+  // --- Dashboard revamp item 2: six metric cards --------------------------
+  // Every "usual" below is the user's OWN history (patterns.ts), never a
+  // population reference, and every card carries its evidence count.
+  const readingsAll = user.glucoseReadings.map((g) => ({ value: g.value, takenAt: g.takenAt.getTime() }));
+  const latestG = user.glucoseReadings[0];
+  const nowMs = Date.now();
+  const usual = latestG
+    ? usualPatternAt(readingsAll, latestG.takenAt.getTime(), { now: nowMs })
+    : { median: null, n: 0, spread: null, windowHours: 1, days: 14 };
+  const deviation = latestG ? deviationFromUsual(latestG.value, usual) : null;
+  const alert =
+    deviation !== null && usual.n >= MIN_PATTERN_N && Math.abs(deviation) >= DEVIATION_ALERT_MGDL;
+
+  // "2 h after lunch": the most recent meal logged today before the reading.
+  let afterMeal: MetricCards['glucose']['afterMeal'] = null;
+  if (latestG) {
+    const priorMeals = user.foodEntries
+      .filter((m) => m.loggedAt < latestG.takenAt && m.loggedAt >= startOfToday)
+      .sort((a, b) => b.loggedAt.getTime() - a.loggedAt.getTime());
+    const m = priorMeals[0];
+    if (m) {
+      const hours = (latestG.takenAt.getTime() - m.loggedAt.getTime()) / 3_600_000;
+      afterMeal = {
+        hours: Math.round(hours * 10) / 10,
+        slot: mealSlotForHour(istHour(m.loggedAt.getTime())),
+        mealName: foodIndex[m.foodId]?.name ?? m.foodId,
+      };
+    }
+  }
+
+  const stepsToday = sum(
+    user.activityEntries
+      .filter((a) => a.at >= startOfToday && a.type === 'walk')
+      .map((a) => stepsFromActivity(a.type, a.durationMin)),
+  );
+  // Per-day step totals for the 7-day sparkline (server-local days, matching
+  // the dailySummary convention already on this page).
+  const daySteps: { dayStart: number; steps: number }[] = [];
+  for (let d = 7; d >= 0; d--) {
+    const ds = new Date(startOfToday.getTime() - d * DAY);
+    const next = new Date(ds.getTime() + DAY);
+    const steps = sum(
+      user.activityEntries
+        .filter((a) => a.type === 'walk' && a.at >= ds && a.at < next)
+        .map((a) => stepsFromActivity(a.type, a.durationMin)),
+    );
+    daySteps.push({ dayStart: ds.getTime(), steps });
+  }
+  const latestActivity = user.activityEntries[0];
+
+  const metricCards: MetricCards = {
+    glucose: latestG
+      ? {
+          latest: { value: latestG.value, takenAt: latestG.takenAt.getTime(), source: latestG.source },
+          usual: { median: usual.median, n: usual.n, spread: usual.spread },
+          deviation,
+          alert,
+          afterMeal,
+        }
+      : { latest: null, usual: { median: null, n: 0, spread: null }, deviation: null, alert: false, afterMeal: null },
+    timeInRange: timeInRange(readingsAll, nowMs),
+    steps: {
+      ...stepsContext(stepsToday, daySteps, startOfToday.getTime()),
+      latestSource: latestActivity?.source ?? null,
+      latestAt: latestActivity?.at.getTime() ?? null,
+    },
+    sleep: sleepContext(user.sleepEntries.map((s) => ({ hours: s.hours, wokeAt: s.wokeAt.getTime() }))),
+    weight: weightContext(user.weightEntries.map((w) => ({ kg: w.kg, takenAt: w.takenAt.getTime() })), nowMs),
+    meds: medsToday(
+      user.meds.map((m) => ({ id: m.id, name: m.name, scheduleTimes: m.scheduleTimes, isActive: true })),
+      user.meds.flatMap((m) =>
+        m.logs.map((l) => ({
+          medicationId: m.id,
+          slotTime: l.slotTime,
+          logDate: l.logDate,
+          status: l.status,
+          createdAt: l.createdAt.getTime(),
+        })),
+      ),
+      istNow().slice(0, 10),
+    ),
+  };
+
   const glucoseSeries = user.glucoseReadings
     .map((g) => ({ t: g.takenAt.getTime(), value: g.value }))
     .filter((p) => p.t >= since - 13 * DAY)
@@ -211,6 +357,7 @@ export async function loadDashboardData(userId: string): Promise<DashboardData |
     isPrior,
     sampleSize,
     updatedStamp,
+    metricCards,
     healthScore: hs,
     dailySummary: daily,
     timeline,

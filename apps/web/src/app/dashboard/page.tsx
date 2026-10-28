@@ -6,6 +6,7 @@ import { loadDashboardData } from '@/lib/engine-service';
 import { greetingForHour, istHour, relativeTime, sourceLabel } from '@/lib/dashboard-stamp';
 import AppShell from '@/components/AppShell';
 import HealthScoreRing from '@/components/dashboard/HealthScoreRing';
+import MetricCardsRow from '@/components/dashboard/MetricCards';
 import { GlucoseChart, WeightChart, ForecastChart } from '@/components/dashboard/Charts';
 import { REGION_LABELS } from '@mi/food-db';
 import { getPendingCheckIns } from '@/lib/pairing';
@@ -26,7 +27,7 @@ export default async function DashboardPage() {
   ]);
   if (!data) redirect('/onboarding');
 
-  const { healthScore: hs, dailySummary: daily, profile, sensitivity, isPrior, updatedStamp } = data;
+  const { healthScore: hs, profile, sensitivity, isPrior, updatedStamp, metricCards } = data;
   const sub = hs.components;
   const latestWeight = data.weightSeries.at(-1)?.kg ?? profile.weightKg;
   const forecastWeight = data.forecast.filter((p) => p.metric === 'weight_kg');
@@ -68,9 +69,23 @@ export default async function DashboardPage() {
 
         <QuickAdd />
 
-        {/* Top row: score + daily summary */}
-        <div className="grid gap-4 lg:grid-cols-3">
-          <Card title="Metabolic Health Score" subtitle="0–100 composite · last 14 days" className="lg:col-span-1">
+        {/* Six metric cards (dashboard revamp item 2): every "usual" is the
+            user's own history, every card carries its source/updated stamp. */}
+        <MetricCardsRow cards={metricCards} now={Date.now()} />
+
+        {/* Charts row */}
+        <div className="mt-4 grid gap-4 lg:grid-cols-3">
+          <Card title="Glucose trend" subtitle="14-day series with target band" className="lg:col-span-2">
+            <GlucoseChart data={data.glucoseSeries} />
+          </Card>
+          <Card title="Weight trend" subtitle={`${latestWeight.toFixed(1)} kg`}>
+            <WeightChart data={data.weightSeries} />
+          </Card>
+        </div>
+
+        {/* Score + forecast + insights (score moved beside them by the v1 layout) */}
+        <div className="mt-4 grid gap-4 lg:grid-cols-3">
+          <Card title="Metabolic Health Score" subtitle="0–100 composite · last 14 days">
             <div className="flex items-center gap-4">
               <HealthScoreRing score={hs.score} />
               <div className="flex-1 space-y-1.5 text-xs">
@@ -84,37 +99,7 @@ export default async function DashboardPage() {
             </div>
           </Card>
 
-          <Card title="Today" subtitle="Daily summary" className="lg:col-span-2">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Stat label="Calories" value={`${Math.round(daily.kcal)}`} unit="kcal" />
-              <Stat label="Carbs" value={`${daily.carbsG}`} unit="g" />
-              <Stat label="Protein" value={`${daily.proteinG}`} unit="g" />
-              <Stat label="Fat" value={`${daily.fatG}`} unit="g" />
-              <Stat label="Steps" value={`${Math.round(daily.steps)}`} />
-              <Stat label="Sleep" value={daily.sleepHours.toFixed(1)} unit="h" />
-              <Stat
-                label="Glucose"
-                value={daily.glucoseReadings.at(-1) ? `${daily.glucoseReadings.at(-1)!.value}` : '—'}
-                unit="mg/dL"
-              />
-              <Stat label="Weight" value={latestWeight.toFixed(1)} unit="kg" />
-            </div>
-          </Card>
-        </div>
-
-        {/* Charts row */}
-        <div className="mt-4 grid gap-4 lg:grid-cols-3">
-          <Card title="Glucose trend" subtitle="14-day series with target band" className="lg:col-span-2">
-            <GlucoseChart data={data.glucoseSeries} />
-          </Card>
-          <Card title="Weight trend" subtitle={`${latestWeight.toFixed(1)} kg`}>
-            <WeightChart data={data.weightSeries} />
-          </Card>
-        </div>
-
-        {/* Forecast + insights */}
-        <div className="mt-4 grid gap-4 lg:grid-cols-3">
-          <Card title="30-day weight forecast" subtitle="With confidence interval · educational" className="lg:col-span-2">
+          <Card title="30-day weight forecast" subtitle="With confidence interval · educational">
             <ForecastChart data={forecastWeight} />
             <p className="mt-2 text-xs text-neutral-500">
               Based on your recent energy balance. Shaded band = model uncertainty.
@@ -243,17 +228,6 @@ function Card({ title, subtitle, children, className = '' }: { title: string; su
       </div>
       {children}
     </section>
-  );
-}
-
-function Stat({ label, value, unit }: { label: string; value: string; unit?: string }) {
-  return (
-    <div className="rounded-xl border border-neutral-200 p-3 dark:border-neutral-800">
-      <div className="text-xs text-neutral-500">{label}</div>
-      <div className="mt-1 text-lg font-semibold">
-        {value} {unit && <span className="text-xs font-normal text-neutral-400">{unit}</span>}
-      </div>
-    </div>
   );
 }
 
