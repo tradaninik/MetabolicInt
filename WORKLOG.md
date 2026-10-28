@@ -2,6 +2,15 @@
 
 ---
 
+## 2026-10-29 - Session 2, A8: header "Log glucose" outline button
+
+Mission A (mockup fidelity). The mockup header carries two actions - "Log glucose" (outline) + "+ Log a meal" (solid green); the implementation had only the meal button.
+
+- Fix: add the outline "Log glucose" link to /glucose (its "Log a reading" section) beside the existing solid button, wrapped in a flex gap row. Dark-mode styling included.
+- Gates: 616 passed + 3 skipped · tsc ×3 silent · lint = the 3 known `<img>` warnings · build "Compiled successfully".
+
+---
+
 ## 2026-10-29 - Session 2, A7: seasonal + agni side-by-side bottom row
 
 Mission A (mockup fidelity). The mockup bottom row shows "Season · Ritucharya" and "Agni rhythm" as two cards side by side; the implementation stacked them full-width.

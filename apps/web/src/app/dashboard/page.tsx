@@ -59,9 +59,19 @@ export default async function DashboardPage() {
                 : <span className="ml-1 rounded-full bg-brand-100 px-2 py-0.5 text-[10px] text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">learned</span>}
             </p>
           </div>
-          <Link href="/log" className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
-            + Log a meal
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            {/* Two header actions per the approved v1 mockup: outline
+                "Log glucose" (-> /glucose "Log a reading") + solid "+ Log a meal". */}
+            <Link
+              href="/glucose"
+              className="rounded-lg border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-700 hover:border-neutral-400 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-200 dark:hover:bg-neutral-900"
+            >
+              Log glucose
+            </Link>
+            <Link href="/log" className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
+              + Log a meal
+            </Link>
+          </div>
         </div>
 
         {/* Disclaimer */}
