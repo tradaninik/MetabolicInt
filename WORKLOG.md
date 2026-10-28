@@ -2,6 +2,15 @@
 
 ---
 
+## 2026-10-29 - Session 2, A7: seasonal + agni side-by-side bottom row
+
+Mission A (mockup fidelity). The mockup bottom row shows "Season · Ritucharya" and "Agni rhythm" as two cards side by side; the implementation stacked them full-width.
+
+- Fix: wrap SeasonalCard + AgniRhythmCard in a `lg:grid-cols-2` row on the dashboard (stacked on mobile). Both components drop their own `mt-4` (spacing now owned by the grid) and gain `flex h-full flex-col` so the pair renders equal-height like the mockup. Titles stay honest: "This month: {season}" / "Agni rhythm today" — the mockup's "planner" wording promises Phase-3 planning features that don't exist yet.
+- Gates: 616 passed + 3 skipped · tsc ×3 silent · lint = the 3 known `<img>` warnings · build "Compiled successfully".
+
+---
+
 ## 2026-10-29 - Session 2, A6: metabolic timeline moved below the charts row
 
 Mission A (mockup fidelity, dashboard-mockup-v1.png). The approved mockup order is metric cards → glucose chart + investigate → **timeline** → score/weight/insights → suggestions → seasonal + agni → footer; the implementation had the timeline dead-last, after Seasonal and Agni.

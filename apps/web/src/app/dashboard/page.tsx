@@ -151,11 +151,15 @@ export default async function DashboardPage() {
           <SuggestionsCard suggestions={data.suggestions} today={istDayBounds(Date.now()).dateStr} />
         </div>
 
-        {/* Seasonal guidance (U14 Ritucharya) */}
-        <SeasonalCard />
+        {/* Seasonal + agni side-by-side per the approved v1 mockup bottom row
+            (stacked on mobile; each card stretches to equal height). */}
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          {/* Seasonal guidance (U14 Ritucharya) */}
+          <SeasonalCard />
 
-        {/* Agni rhythm (P4c-b U17) */}
-        <AgniRhythmCard userId={session.user.id} />
+          {/* Agni rhythm (P4c-b U17) */}
+          <AgniRhythmCard userId={session.user.id} />
+        </div>
 
         {/* Provenance line (revamp item 7, approved v1 footer): everything on
             this page is the user's own data, and every save re-renders it via
