@@ -5,6 +5,7 @@
 // explorer and the /healing-foods/[slug] profile never drift apart.
 
 import type { ReactNode } from 'react';
+import AyurvedaGate from './AyurvedaGate';
 import type { AyurvedaLens, EvidenceGrade, FoodAsMedicineData, LensChoice, ScienceLens, StoriesLens, TraditionLens } from '@/lib/healingFoods';
 
 export const LENS_CHOICES: { id: LensChoice; label: string }[] = [
@@ -114,13 +115,15 @@ export function LensSection({
 
 /** P5 - Ancient practice section. Deliberately NOT a lens: it renders as its
  *  own amber-toned panel after the three lens sections, always visible when
- *  an entry carries tradition content (it is not part of the lens toggle). */
+ *  an entry carries tradition content (it is not part of the lens toggle).
+ *  S2-B6: hidden entirely when the Ayurveda personalisation switch is off. */
 export function TraditionSection({ lens }: { lens: TraditionLens }) {
   return (
-    <section
-      aria-label="Ancient practice"
-      className="rounded-xl border border-amber-200 bg-amber-50/50 p-3 dark:border-amber-900/60 dark:bg-amber-950/20"
-    >
+    <AyurvedaGate>
+      <section
+        aria-label="Ancient practice"
+        className="rounded-xl border border-amber-200 bg-amber-50/50 p-3 dark:border-amber-900/60 dark:bg-amber-950/20"
+      >
       <h3 className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
         Ancient practice · what the tradition says
       </h3>
@@ -162,7 +165,8 @@ export function TraditionSection({ lens }: { lens: TraditionLens }) {
           {lens.note}
         </p>
       )}
-    </section>
+      </section>
+    </AyurvedaGate>
   );
 }
 

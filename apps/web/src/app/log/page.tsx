@@ -27,6 +27,7 @@ import {
 } from '@mi/engine';
 import { FOOD_INDEX, REGION_LABELS, tasteOf, viruddhaTagsOf, findViruddhaTagsByName } from '@mi/food-db'; // C2: FOOD_INDEX for the placeholder count
 import { classifyMealType } from '@/lib/meal-bits';
+import { useAyurvedaEnabled } from '@/lib/ayurveda-prefs'; // S2-B6: gate the tray's classical lenses on the off-switch
 import { PLATES, getPlateItems } from '@/lib/plates';
 import { enqueueMeals, registerMealSync } from '@/lib/offlineQueue'; // P5-b: offline meal queue
 
@@ -96,6 +97,9 @@ export default function LogPage() {
   // P4c-c / U19: amber pairing notes returned by the meals API after a save
   // (same-meal window - catches cross-tray combos like milk 40 minutes ago + fish now).
   const [viruddhaBanner, setViruddhaBanner] = useState<ViruddhaFinding[] | null>(null);
+  // S2-B6: the tastes lens, pairing check and low-agni banner are classical
+  // wellbeing content - all three hide when Ayurveda personalisation is off.
+  const [ayurvedaOn] = useAyurvedaEnabled();
   const [comboName, setComboName] = useState('');
   const [myCombos, setMyCombos] = useState<{ id: string; name: string; items: { food: Food; portionType: 'serving' | 'katori' | 'grams'; portionValue: number }[] }[]>([]);
   const [comboMsg, setComboMsg] = useState<string | null>(null);
@@ -903,7 +907,7 @@ export default function LogPage() {
             </div>
 
             {/* P4c-b / U16: Tastes in this meal - the Ayurveda lens over the tray. */}
-            {tasteBalance.coverage.known > 0 && (
+            {ayurvedaOn && tasteBalance.coverage.known > 0 && (
               <div className="mt-4 rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xs font-medium text-neutral-500">Tastes in this meal:</span>
@@ -941,7 +945,7 @@ export default function LogPage() {
 
             {/* P4c-c / U19: classical pairing check (viruddha ahara) over the tray.
                 Amber, never red: educational tradition with both lenses shown. */}
-            {viruddhaFindings.length > 0 && (
+            {ayurvedaOn && viruddhaFindings.length > 0 && (
               <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/40">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xs font-medium text-amber-900 dark:text-amber-200">Classical pairing check (viruddha ahara):</span>
@@ -1078,7 +1082,7 @@ export default function LogPage() {
         )}
 
         {/* P4c-b / U17: gentle educational banner when the meal landed in a low-agni window. */}
-        {agniBanner && (
+        {ayurvedaOn && agniBanner && (
           <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
             <p className="font-medium">{agniBanner.title}</p>
             <p className="mt-1">{agniBanner.body}</p>
@@ -1089,7 +1093,7 @@ export default function LogPage() {
         )}
 
         {/* P4c-c / U19: amber pairing notes from the same-meal window after a save. */}
-        {viruddhaBanner && viruddhaBanner.length > 0 && (
+        {ayurvedaOn && viruddhaBanner && viruddhaBanner.length > 0 && (
           <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
             <p className="font-medium">Classical pairing note for what you just logged</p>
             <ViruddhaNotes findings={viruddhaBanner} />

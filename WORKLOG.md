@@ -2,6 +2,21 @@
 
 ---
 
+## 2026-10-29 - S2-B6 hotfix: the Ayurveda off-switch now reaches every traditional surface
+
+User-reported on the installed build: turning the Settings "Ayurveda personalisation" switch off hid the Know Your Body tradition sections and the wellness card (its shipped scope), but the Dashboard's Agni rhythm + Seasonal cards, the Log meal tastes/pairing/low-agni lenses, and the Healing foods ancient-practice panels stayed visible. Root cause was scope, not breakage: B5's switch gated only the B-mission client components; the dashboard cards and the healing-foods card are server components that predate the switch and cannot read a device-local (localStorage) preference themselves.
+
+- New `AyurvedaGate` client wrapper (mounted-safe, same pattern as the wellness card: renders nothing until mounted, then only when the preference is on). Children still render on the server into the RSC payload, so the gated server components keep their queries/props untouched - the gate is purely presentational.
+- Dashboard: the whole seasonal+agni row (not just the cards) is gated, so the off state leaves no empty grid gap.
+- Log meal: tastes-in-this-meal, the viruddha pairing check, the post-save pairing notes and the low-agni banner all gate on the same preference (page is a client component - same `useAyurvedaEnabled` pattern as PrakritiResult).
+- Healing foods: the "Ancient practices" card (server page) via AyurvedaGate; each food profile's TraditionSection (client) via the same gate.
+- Settings copy updated to state the real coverage: Know Your Body tradition sections, daily ideas, Dashboard seasonal/agni cards, Log meal tastes + pairing notes, Healing foods ancient-practice panels. Medical features and the user's own Know Your Body answers/history remain always-visible by design.
+- Scope discipline: zero new tables, zero migrations, no API changes, no package changes, no engine changes; every gate is presentational on existing surfaces.
+
+- Gates: 619 passed + 3 skipped · tsc ×3 silent · lint 0/0 · build "Compiled successfully".
+
+---
+
 ## 2026-10-29 - Session 2 closeout: A (mockup fidelity) + B (Ayurveda Phase 1) + D (deps) + E (tech debt) shipped
 
 Session 2 delivered 16 commits on top of main @ 25ed988, every one gates-green before commit (tests never below 616+3 baseline - final: 619+3; tsc ×3 silent; lint 0/0 after E; build compiled).

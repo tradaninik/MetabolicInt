@@ -195,8 +195,10 @@ export default function SettingsPage() {
         <div className="mt-4 rounded-2xl border border-neutral-200 p-5 dark:border-neutral-800">
           <h2 className="text-lg font-semibold">Ayurveda personalisation</h2>
           <p className="mt-1 text-sm text-neutral-500">
-            Show traditional (Ayurvedic) wellbeing content — the Know Your Body tradition sections and
-            daily ideas. Turning this off hides them; every medical feature stays exactly as it is.
+            Show traditional (Ayurvedic) wellbeing content — the Know Your Body tradition sections,
+            daily ideas, the seasonal and agni cards on your Dashboard, the tastes and pairing notes
+            on Log meal, and the ancient-practice panels on Healing foods. Turning this off hides
+            them all; every medical feature stays exactly as it is.
           </p>
           <div className="mt-3 flex items-center gap-3">
             <button
@@ -212,7 +214,7 @@ export default function SettingsPage() {
               />
             </button>
             <span className="text-sm">
-              {ayurvedaOn ? 'On — tradition sections and daily ideas visible' : 'Off — traditional suggestions hidden'}
+              {ayurvedaOn ? 'On — traditional wellbeing content visible' : 'Off — traditional wellbeing content hidden'}
             </span>
           </div>
           <p className="mt-2 text-xs text-neutral-400">

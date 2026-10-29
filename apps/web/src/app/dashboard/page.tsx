@@ -18,6 +18,7 @@ import CheckInCard from '@/components/CheckInCard';
 import QuickAdd from '@/components/QuickAdd';
 import SeasonalCard from '@/components/SeasonalCard';
 import AgniRhythmCard from '@/components/AgniRhythmCard';
+import AyurvedaGate from '@/components/AyurvedaGate';
 
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
@@ -162,14 +163,19 @@ export default async function DashboardPage() {
         </div>
 
         {/* Seasonal + agni side-by-side per the approved v1 mockup bottom row
-            (stacked on mobile; each card stretches to equal height). */}
-        <div className="mt-4 grid gap-4 lg:grid-cols-2">
-          {/* Seasonal guidance (U14 Ritucharya) */}
-          <SeasonalCard />
+            (stacked on mobile; each card stretches to equal height).
+            S2-B6: gated on the Ayurveda off-switch — both cards are classical
+            wellbeing content; with the switch off the whole row (and its gap)
+            disappears, medical cards above are untouched. */}
+        <AyurvedaGate>
+          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            {/* Seasonal guidance (U14 Ritucharya) */}
+            <SeasonalCard />
 
-          {/* Agni rhythm (P4c-b U17) */}
-          <AgniRhythmCard userId={session.user.id} />
-        </div>
+            {/* Agni rhythm (P4c-b U17) */}
+            <AgniRhythmCard userId={session.user.id} />
+          </div>
+        </AyurvedaGate>
 
         {/* Provenance line (revamp item 7, approved v1 footer): everything on
             this page is the user's own data, and every save re-renders it via
