@@ -179,7 +179,12 @@ export default function GlucoseTodayChart({ chart }: { chart: GlucoseChartData }
             dataKey="value"
             stroke="#16b077"
             strokeWidth={2}
-            dot={(p: { cx?: number; cy?: number; payload?: { t: number } }) => <MeasuredDot {...p} focusT={today.focusT} />}
+            dot={(p: { cx?: number; cy?: number; payload?: { t: number } }) => (
+              // Explicit props, never a spread: recharts passes a `key` inside the
+              // dot-render props, and spreading a key-carrying object into JSX is
+              // the console error this app forbids (was the page's only error).
+              <MeasuredDot cx={p.cx} cy={p.cy} payload={p.payload} focusT={today.focusT} />
+            )}
             connectNulls
             isAnimationActive={false}
           />

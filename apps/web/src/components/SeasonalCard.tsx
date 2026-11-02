@@ -10,7 +10,7 @@ export default function SeasonalCard() {
   const card = ritucharyaCard(ritucharyaSeason(month));
 
   return (
-    <section className="mt-4 rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-950">
+    <section className="flex h-full flex-col rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-950">
       <div className="mb-4">
         <h2 className="text-sm font-semibold">This month: {card.name}</h2>
         <p className="text-xs text-neutral-500">Seasonal routine (Ritucharya) · {card.window}</p>

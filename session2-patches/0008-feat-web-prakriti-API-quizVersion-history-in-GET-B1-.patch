@@ -1,0 +1,178 @@
+From 057f8b2d68167bac2d2a9c20f1a6c2cadd6f7fb3 Mon Sep 17 00:00:00 2001
+From: Z User <z@container>
+Date: Wed, 28 Oct 2026 16:45:04 +0000
+Subject: [PATCH 08/16] feat(web): prakriti API - quizVersion, history in GET,
+ B1 label fields (S2-B)
+
+GET: one findMany (latest 10) -> latest + history[] with rescored
+profileLabel/isTie per row (old rows also get the no-dominance label;
+invalid answers degrade to counts-only). GET/POST payloads gain
+profileLabel/isTie/quizVersion. POST semantics untouched (new row per
+retake, owner-guarded). Zero schema change. Gates all green.
+---
+ WORKLOG.md                                    | 10 +++
+ .../src/app/api/ayurveda/prakriti/route.ts    | 85 +++++++++++++++----
+ 2 files changed, 79 insertions(+), 16 deletions(-)
+
+diff --git a/WORKLOG.md b/WORKLOG.md
+index 35b7275..b6e2042 100644
+--- a/WORKLOG.md
++++ b/WORKLOG.md
+@@ -2,6 +2,16 @@
+ 
+ ---
+ 
++## 2026-10-29 - Session 2, B-API: quizVersion + history in GET, B1 fields in every payload
++
++Mission B step 2. The prakriti API now speaks the B1 engine's language; zero schema change (history rows + index already existed).
++
++- GET: single findMany (latest 10, takenAt desc) replaces the findFirst - rows[0] IS the latest, behavior preserved. Response gains `quizVersion` (top level) and `history[]` (takenAt + stored counts + rescored pcts/profileLabel/isTie per row). Every stored row is RESCORED with the current engine, so pre-B1 rows also display the no-dominance label; rows whose answers no longer validate degrade to counts-only, never an error.
++- GET/POST `profile` payloads gain `profileLabel` + `isTie` + `quizVersion` (POST response also carries quizVersion top level). POST stays a new-row-per-retake, owner-guarded, 400 on incomplete answers - untouched semantics.
++- Gates: 619 passed + 3 skipped · tsc ×3 silent · lint = the 3 known `<img>` warnings · build "Compiled successfully".
++
++---
++
+ ## 2026-10-29 - Session 2, B1: engine tie semantics - profileLabel + QUIZ_VERSION (Ayurveda Phase 1)
+ 
+ Mission B step 1 (engine-first, tests updated deliberately - see below). The spec complaint, live-reproduced at 25ed988: a 5/5/2 tie displayed "Vata primary · Pitta secondary" at 42%/42% - a tie implying dominance.
+diff --git a/apps/web/src/app/api/ayurveda/prakriti/route.ts b/apps/web/src/app/api/ayurveda/prakriti/route.ts
+index 4b2db76..2145086 100644
+--- a/apps/web/src/app/api/ayurveda/prakriti/route.ts
++++ b/apps/web/src/app/api/ayurveda/prakriti/route.ts
+@@ -2,46 +2,96 @@ import { NextResponse } from 'next/server';
+ import { getServerSession } from 'next-auth';
+ import { authOptions } from '@/lib/auth';
+ import { prisma } from '@/lib/prisma';
+-import { PRAKRITI_QUESTIONS, scorePrakriti } from '@mi/engine';
++import { PRAKRITI_QUESTIONS, QUIZ_VERSION, scorePrakriti } from '@mi/engine';
+ 
+ export const dynamic = 'force-dynamic';
+ 
+ // U11 Prakriti: owner-guarded self-assessment API. Educational only - not a medical classification.
+-// GET returns the quiz questions plus your latest stored profile (history is kept; latest wins).
++// S2-B: every payload carries quizVersion; the profile leads with the no-dominance
++// profileLabel (a tie never implies a dominant dosha); GET also returns the recent
++// retake history (rows already exist and are indexed - zero schema change).
++const HISTORY_LIMIT = 10;
++
++function parseAnswers(json: string): Record<string, string> {
++  try {
++    const parsed = JSON.parse(json);
++    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
++      return parsed as Record<string, string>;
++    }
++  } catch {
++    /* fall through to empty */
++  }
++  return {};
++}
++
++/** Rescore stored answers with the CURRENT engine so old rows also get the
++ *  tie-aware label. Returns null when the answers no longer validate. */
++function rescore(stored: Record<string, string>) {
++  try {
++    return scorePrakriti(stored);
++  } catch {
++    return null;
++  }
++}
++
+ export async function GET() {
+   const session = await getServerSession(authOptions);
+   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+ 
+-  const latest = await prisma.prakritiProfile.findFirst({
++  const rows = await prisma.prakritiProfile.findMany({
+     where: { userId: session.user.id },
+     orderBy: { takenAt: 'desc' },
++    take: HISTORY_LIMIT,
+   });
+-  if (!latest) return NextResponse.json({ questions: PRAKRITI_QUESTIONS, profile: null });
++  if (rows.length === 0) {
++    return NextResponse.json({ questions: PRAKRITI_QUESTIONS, quizVersion: QUIZ_VERSION, profile: null, history: [] });
++  }
+ 
+-  let stored: Record<string, string> = {};
+-  try {
+-    const parsed = JSON.parse(latest.answersJson);
+-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) stored = parsed as Record<string, string>;
+-  } catch { stored = {}; }
++  const latest = rows[0];
++  const stored = parseAnswers(latest.answersJson);
++  const rescored = rescore(stored);
+ 
+-  let pct: { vataPct: number; pittaPct: number; kaphaPct: number } | null = null;
+-  try {
+-    const rescored = scorePrakriti(stored);
+-    pct = { vataPct: rescored.vataPct, pittaPct: rescored.pittaPct, kaphaPct: rescored.kaphaPct };
+-  } catch { pct = null; }
++  const history = rows.map((row) => {
++    const r = rescore(parseAnswers(row.answersJson));
++    return {
++      takenAt: row.takenAt,
++      vata: row.vataScore,
++      pitta: row.pittaScore,
++      kapha: row.kaphaScore,
++      ...(r
++        ? {
++            vataPct: r.vataPct,
++            pittaPct: r.pittaPct,
++            kaphaPct: r.kaphaPct,
++            profileLabel: r.profileLabel,
++            isTie: r.isTie,
++          }
++        : {}),
++    };
++  });
+ 
+   return NextResponse.json({
+     questions: PRAKRITI_QUESTIONS,
++    quizVersion: QUIZ_VERSION,
+     profile: {
+       answers: stored,
+       vata: latest.vataScore,
+       pitta: latest.pittaScore,
+       kapha: latest.kaphaScore,
+-      ...(pct ?? {}),
++      ...(rescored
++        ? {
++            vataPct: rescored.vataPct,
++            pittaPct: rescored.pittaPct,
++            kaphaPct: rescored.kaphaPct,
++            profileLabel: rescored.profileLabel,
++            isTie: rescored.isTie,
++          }
++        : {}),
+       primary: latest.primaryDosha,
+       secondary: latest.secondaryDosha,
+       takenAt: latest.takenAt,
+     },
++    history,
+   });
+ }
+ 
+@@ -87,6 +137,7 @@ export async function POST(req: Request) {
+   });
+ 
+   return NextResponse.json({
++    quizVersion: QUIZ_VERSION,
+     profile: {
+       answers: clean,
+       vata: result.vata,
+@@ -95,9 +146,11 @@ export async function POST(req: Request) {
+       vataPct: result.vataPct,
+       pittaPct: result.pittaPct,
+       kaphaPct: result.kaphaPct,
++      profileLabel: result.profileLabel,
++      isTie: result.isTie,
+       primary: result.primary,
+       secondary: result.secondary,
+       takenAt: row.takenAt,
+     },
+   });
+-}
+\ No newline at end of file
++}
+-- 
+2.47.3
+

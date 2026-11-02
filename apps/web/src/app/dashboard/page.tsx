@@ -59,9 +59,19 @@ export default async function DashboardPage() {
                 : <span className="ml-1 rounded-full bg-brand-100 px-2 py-0.5 text-[10px] text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">learned</span>}
             </p>
           </div>
-          <Link href="/log" className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
-            + Log a meal
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            {/* Two header actions per the approved v1 mockup: outline
+                "Log glucose" (-> /glucose "Log a reading") + solid "+ Log a meal". */}
+            <Link
+              href="/glucose"
+              className="rounded-lg border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-700 hover:border-neutral-400 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-200 dark:hover:bg-neutral-900"
+            >
+              Log glucose
+            </Link>
+            <Link href="/log" className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
+              + Log a meal
+            </Link>
+          </div>
         </div>
 
         {/* Disclaimer */}
@@ -83,6 +93,12 @@ export default async function DashboardPage() {
             <GlucoseTodayChart chart={data.glucoseChart} />
           </div>
           <WhyHighCard attribution={data.attribution} glucose={metricCards.glucose} />
+        </div>
+
+        {/* Horizontal metabolic timeline (revamp item 5) - directly below the
+            charts row per the approved v1 mockup (was page-bottom before). */}
+        <div className="mt-4">
+          <MetabolicTimeline items={data.metabolicTimeline} />
         </div>
 
         {/* Score + forecast + insights (score moved beside them by the v1 layout) */}
@@ -145,15 +161,14 @@ export default async function DashboardPage() {
           <SuggestionsCard suggestions={data.suggestions} today={istDayBounds(Date.now()).dateStr} />
         </div>
 
-        {/* Seasonal guidance (U14 Ritucharya) */}
-        <SeasonalCard />
+        {/* Seasonal + agni side-by-side per the approved v1 mockup bottom row
+            (stacked on mobile; each card stretches to equal height). */}
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          {/* Seasonal guidance (U14 Ritucharya) */}
+          <SeasonalCard />
 
-        {/* Agni rhythm (P4c-b U17) */}
-        <AgniRhythmCard userId={session.user.id} />
-
-        {/* Horizontal metabolic timeline (revamp item 5) */}
-        <div className="mt-4">
-          <MetabolicTimeline items={data.metabolicTimeline} />
+          {/* Agni rhythm (P4c-b U17) */}
+          <AgniRhythmCard userId={session.user.id} />
         </div>
 
         {/* Provenance line (revamp item 7, approved v1 footer): everything on

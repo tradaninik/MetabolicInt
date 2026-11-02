@@ -1,0 +1,87 @@
+From 80ab89618d39cabb7b1e6577a57e6e353a05cf3f Mon Sep 17 00:00:00 2001
+From: Z User <z@container>
+Date: Wed, 28 Oct 2026 16:36:44 +0000
+Subject: [PATCH 05/16] fix(web): brand MetabolicInt + heart mark per mockup v1
+ (S2-A9)
+
+Sidebar + mobile header: text 'Metabolic' -> 'MetabolicInt', add
+'Personal metabolic model' subtitle (desktop), heart-in-square
+BrandMark (inline SVG, zero new deps). Gates all green.
+---
+ WORKLOG.md                           |  9 +++++++++
+ apps/web/src/components/AppShell.tsx | 28 ++++++++++++++++++++++++----
+ 2 files changed, 33 insertions(+), 4 deletions(-)
+
+diff --git a/WORKLOG.md b/WORKLOG.md
+index 4c45fa3..32e2955 100644
+--- a/WORKLOG.md
++++ b/WORKLOG.md
+@@ -2,6 +2,15 @@
+ 
+ ---
+ 
++## 2026-10-29 - Session 2, A9: sidebar brand = MetabolicInt + heart mark
++
++Mission A (mockup fidelity). Mockup brand: "MetabolicInt" + "Personal metabolic model" subtitle + heart-in-rounded-square mark; implementation read "Metabolic" with a plain green square.
++
++- Fix (AppShell.tsx): brand text -> "MetabolicInt", subtitle line under it (desktop sidebar; mobile top bar stays compact), and a new inline BrandMark component (heart SVG inside the brand square - no new dependencies). Same treatment in the mobile header.
++- Gates: 616 passed + 3 skipped · tsc ×3 silent · lint = the 3 known `<img>` warnings · build "Compiled successfully".
++
++---
++
+ ## 2026-10-29 - Session 2, A8: header "Log glucose" outline button
+ 
+ Mission A (mockup fidelity). The mockup header carries two actions - "Log glucose" (outline) + "+ Log a meal" (solid green); the implementation had only the meal button.
+diff --git a/apps/web/src/components/AppShell.tsx b/apps/web/src/components/AppShell.tsx
+index 749081d..38f46ee 100644
+--- a/apps/web/src/components/AppShell.tsx
++++ b/apps/web/src/components/AppShell.tsx
+@@ -50,8 +50,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
+       {/* Sidebar (desktop) */}
+       <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-950 lg:flex">
+         <Link href="/dashboard" className="mb-8 flex items-center gap-2">
+-          <div className="h-7 w-7 rounded-lg bg-brand-500" aria-hidden />
+-          <span className="font-semibold tracking-tight">Metabolic</span>
++          <BrandMark className="h-7 w-7 rounded-lg" />
++          <span className="flex flex-col leading-tight">
++            <span className="font-semibold tracking-tight">MetabolicInt</span>
++            <span className="text-[10px] text-neutral-500 dark:text-neutral-400">
++              Personal metabolic model
++            </span>
++          </span>
+         </Link>
+         <nav className="flex flex-1 flex-col gap-1">
+           {NAV.map((n) => (
+@@ -83,8 +88,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
+       <div className="flex flex-1 flex-col">
+         <header className="sticky top-0 z-10 flex items-center justify-between border-b border-neutral-200 bg-white/80 px-4 py-3 backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/80 lg:hidden">
+           <Link href="/dashboard" className="flex items-center gap-2">
+-            <div className="h-6 w-6 rounded-md bg-brand-500" aria-hidden />
+-            <span className="font-semibold tracking-tight">Metabolic</span>
++            <BrandMark className="h-6 w-6 rounded-md" />
++            <span className="font-semibold tracking-tight">MetabolicInt</span>
+           </Link>
+           <button
+             onClick={() => signOut({ callbackUrl: '/' })}
+@@ -231,3 +236,18 @@ function MoreSheet({ onClose }: { onClose: () => void }) {
+     </div>
+   );
+ }
++
++/**
++ * Brand mark per the approved v1 mockup: a heart inside the rounded
++ * brand-colored square (inline SVG, no new dependencies). `className`
++ * sizes the square (h-7 w-7 desktop, h-6 w-6 mobile header).
++ */
++function BrandMark({ className }: { className: string }) {
++  return (
++    <div className={`flex items-center justify-center bg-brand-500 ${className}`} aria-hidden>
++      <svg viewBox="0 0 24 24" className="h-[60%] w-[60%] text-white" fill="currentColor" aria-hidden="true">
++        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
++      </svg>
++    </div>
++  );
++}
+-- 
+2.47.3
+

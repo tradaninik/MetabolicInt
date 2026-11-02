@@ -1,0 +1,57 @@
+From a5459528dc4abc375cd46ef73fe5e66e245ec7f9 Mon Sep 17 00:00:00 2001
+From: Z User <z@container>
+Date: Wed, 28 Oct 2026 16:31:21 +0000
+Subject: [PATCH 01/16] fix(web): MeasuredDot explicit props - no key-spread
+ into JSX (S2-A2)
+
+Recharts passes a key inside the dot-render props; spreading it into
+<MeasuredDot> was the only console error on /dashboard (all widths,
+local + prod). Pass cx/cy/payload/focusT explicitly instead. Zero
+behavior change. Gates: 616+3 tests, tsc x3 silent, lint 3 known img
+warnings, build compiled successfully.
+---
+ WORKLOG.md                                              | 9 +++++++++
+ apps/web/src/components/dashboard/GlucoseTodayChart.tsx | 7 ++++++-
+ 2 files changed, 15 insertions(+), 1 deletion(-)
+
+diff --git a/WORKLOG.md b/WORKLOG.md
+index 9ea9ada..b16d011 100644
+--- a/WORKLOG.md
++++ b/WORKLOG.md
+@@ -2,6 +2,15 @@
+ 
+ ---
+ 
++## 2026-10-29 - Session 2, A2: MeasuredDot key-spread console fix
++
++Mission A (dashboard visual fidelity). The only console error on /dashboard (all widths, local + prod) was React's "props object containing a `key` prop is being spread into JSX" from GlucoseTodayChart's dot renderer: recharts passes `key` inside the dot props, and the callback spread `{...p}` into `<MeasuredDot>`.
++
++- Fix: pass `cx`/`cy`/`payload`/`focusT` explicitly instead of the spread (GlucoseTodayChart.tsx:182). Zero behavior change; the focus-reading amber ring and dot sizes are untouched.
++- Gates: 616 passed + 3 skipped (51 files) · tsc ×3 silent · lint = the 3 known `<img>` warnings · build "Compiled successfully" (6 documented pre-existing prisma:no-such-table lines on the empty build DB).
++
++---
++
+ ## 2026-10-28 - Dashboard revamp v1 shipped (items 1-7, approved redesign)
+ 
+ The approved dashboard redesign v1, implemented commit-by-commit with all gates green per commit. Zero migration (0006 stays reserved); no package.json changes; engine + food-db gained pure modules only.
+diff --git a/apps/web/src/components/dashboard/GlucoseTodayChart.tsx b/apps/web/src/components/dashboard/GlucoseTodayChart.tsx
+index df98a04..5250df5 100644
+--- a/apps/web/src/components/dashboard/GlucoseTodayChart.tsx
++++ b/apps/web/src/components/dashboard/GlucoseTodayChart.tsx
+@@ -179,7 +179,12 @@ export default function GlucoseTodayChart({ chart }: { chart: GlucoseChartData }
+             dataKey="value"
+             stroke="#16b077"
+             strokeWidth={2}
+-            dot={(p: { cx?: number; cy?: number; payload?: { t: number } }) => <MeasuredDot {...p} focusT={today.focusT} />}
++            dot={(p: { cx?: number; cy?: number; payload?: { t: number } }) => (
++              // Explicit props, never a spread: recharts passes a `key` inside the
++              // dot-render props, and spreading a key-carrying object into JSX is
++              // the console error this app forbids (was the page's only error).
++              <MeasuredDot cx={p.cx} cy={p.cy} payload={p.payload} focusT={today.focusT} />
++            )}
+             connectNulls
+             isAnimationActive={false}
+           />
+-- 
+2.47.3
+

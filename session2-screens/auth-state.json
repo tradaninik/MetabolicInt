@@ -1,0 +1,63 @@
+{
+  "cookies": [
+    {
+      "name": "next-auth.csrf-token",
+      "value": "f616f62f732901be7c007dbd1129d118e22e0a5e276780eaa98e523b86be7212%7C9f6c4cf53b9f2a6de846f94bec999d67f23dde98da6ab08bf3200f80aecf91d8",
+      "domain": "127.0.0.1",
+      "path": "/",
+      "expires": -1.0,
+      "size": 151,
+      "httpOnly": true,
+      "secure": false,
+      "session": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "__next_hmr_refresh_hash__",
+      "value": "e7b6f7fa1bdff2321ef95bef3d41bc30633457081244afec",
+      "domain": "127.0.0.1",
+      "path": "/",
+      "expires": -1.0,
+      "size": 73,
+      "httpOnly": false,
+      "secure": false,
+      "session": true
+    },
+    {
+      "name": "next-auth.callback-url",
+      "value": "http%3A%2F%2F127.0.0.1%3A3000%2Fdashboard",
+      "domain": "127.0.0.1",
+      "path": "/",
+      "expires": -1.0,
+      "size": 63,
+      "httpOnly": true,
+      "secure": false,
+      "session": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "next-auth.session-token",
+      "value": "eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2R0NNIn0..Lv7ufpAWlymzez7E.UTfOdTeYUtIpqcnaO21guqG05mrzAMAe4yB_cn13e8ppf2MCT54Faz4-9b92BKCZmIEoIx83i8gbU58NPLYIEVC23nihKctMabj7XZ0Xo3zXkkXKd4C460mE7tLmY5TqiymmfRsYdct4YucrIPTIIjcT-wdUUNtyiBTU7KwrstB9V4IciX-tenanxG-btjgvzIk1n8XvuM-q-P0dlp0b8mju4PfOU4QMHg1V75JhsFZlNjwQgfqniE2JyfsjuDArnUFb.xPuVe_sgNp1ncQgKCjXJsA",
+      "domain": "127.0.0.1",
+      "path": "/",
+      "expires": 1795781820.900719,
+      "size": 364,
+      "httpOnly": true,
+      "secure": false,
+      "session": false,
+      "sameSite": "Lax"
+    }
+  ],
+  "origins": [
+    {
+      "origin": "http://127.0.0.1:3000",
+      "localStorage": [
+        {
+          "name": "nextauth.message",
+          "value": "{\"event\":\"session\",\"data\":{\"trigger\":\"getSession\"},\"timestamp\":1793189818}"
+        }
+      ],
+      "sessionStorage": []
+    }
+  ]
+}

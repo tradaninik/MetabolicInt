@@ -1,0 +1,30 @@
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 1134ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 3999ms
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 328ms
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[warning] Detected `scroll-behavior: smooth` on the `<html>` element. In a future version, Next.js will no longer automatically disable smooth scrolling during route transitions. To prepare for this change, add `data-scroll-behavior="smooth"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior
+[error] A props object containing a "key" prop is being spread into JSX:
+  let props = %s;
+  <%s {...props} />
+React keys must be passed directly to JSX without using spread:
+  let props = %s;
+  <%s key={someKey} {...props} /> {key: someKey, r: ..., stroke: ..., strokeWidth: ..., width: ..., height: ..., fill: ..., index: ..., cx: ..., cy: ..., value: ..., dataKey: ..., payload: ..., points: ..., focusT: ...} MeasuredDot {r: ..., stroke: ..., strokeWidth: ..., width: ..., height: ..., fill: ..., index: ..., cx: ..., cy: ..., value: ..., dataKey: ..., payload: ..., points: ..., focusT: ...} MeasuredDot
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 434ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 529ms
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[error] A props object containing a "key" prop is being spread into JSX:
+  let props = %s;
+  <%s {...props} />
+React keys must be passed directly to JSX without using spread:
+  let props = %s;
+  <%s key={someKey} {...props} /> {key: someKey, r: ..., stroke: ..., strokeWidth: ..., width: ..., height: ..., fill: ..., index: ..., cx: ..., cy: ..., value: ..., dataKey: ..., payload: ..., points: ..., focusT: ...} MeasuredDot {r: ..., stroke: ..., strokeWidth: ..., width: ..., height: ..., fill: ..., index: ..., cx: ..., cy: ..., value: ..., dataKey: ..., payload: ..., points: ..., focusT: ...} MeasuredDot

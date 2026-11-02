@@ -1,0 +1,197 @@
+From 8b2a2d3d6b3da6b81dd0a95812e24ebe1f1402db Mon Sep 17 00:00:00 2001
+From: Z User <z@container>
+Date: Wed, 28 Oct 2026 17:06:15 +0000
+Subject: [PATCH 13/16] chore(web): lint to zero - img -> next/image + ESLint
+ CLI migration (S2-E)
+
+E1: the 3 known <img> warnings -> <Image> (meal photo data-URL uses
+unoptimized; catalog cards keep the fixed 16:10 box). E2: next lint
+(removed in Next 16) -> eslint . with flat config (FlatCompat,
+next/core-web-vitals, .next/out/build ignored); postcss anonymous
+export fixed (newly covered). Lint: 3 warnings + deprecation -> 0/0.
+No dependency changes; Prisma untouched. Gates all green.
+---
+ WORKLOG.md                                    | 10 ++++++++
+ apps/web/.eslintrc.json                       |  3 ---
+ apps/web/eslint.config.mjs                    | 23 +++++++++++++++++++
+ apps/web/package.json                         |  2 +-
+ apps/web/postcss.config.mjs                   |  6 ++++-
+ apps/web/src/app/log/page.tsx                 |  7 +++++-
+ apps/web/src/components/CookWithWhatIHave.tsx |  6 ++---
+ apps/web/src/components/RecipeCatalog.tsx     |  6 ++---
+ 8 files changed, 51 insertions(+), 12 deletions(-)
+ delete mode 100644 apps/web/.eslintrc.json
+ create mode 100644 apps/web/eslint.config.mjs
+
+diff --git a/WORKLOG.md b/WORKLOG.md
+index 6e4abd5..16cfe11 100644
+--- a/WORKLOG.md
++++ b/WORKLOG.md
+@@ -2,6 +2,16 @@
+ 
+ ---
+ 
++## 2026-10-29 - Session 2, E: lint to ZERO + next-lint -> ESLint CLI migration
++
++Mission E (both parts). The 3 known `<img>` warnings are gone and the deprecated `next lint` (removed in Next 16) is replaced by the ESLint CLI.
++
++- E1 img -> next/image: log/page.tsx meal photo (data URL -> `<Image unoptimized>`, identical rendering; the optimizer cannot handle data URLs); CookWithWhatIHave.tsx + RecipeCatalog.tsx category cards (`<Image>` with the same fixed 16:10 box; lazy by default, loading/decoding attrs dropped as redundant).
++- E2 lint migration: new eslint.config.mjs (FlatCompat extending next/core-web-vitals - the create-next-app@15 scaffold) + `.next/out/build` global ignores (which `next lint` applied silently) + package.json `"lint": "eslint ."`. `.eslintrc.json` removed. Broader scope than `next lint` (which only scanned source dirs): postcss.config.mjs now linted too - its anonymous-default-export warning fixed with a named const. NO ESLint dependency changes; Prisma untouched (5.22 stays).
++- Gates: 619 passed + 3 skipped · tsc ×3 silent · **lint 0 warnings / 0 errors** (was 3 warnings + deprecation notice) · build "Compiled successfully".
++
++---
++
+ ## 2026-10-29 - Session 2, A2b: explicit key on MeasuredDot (completes the no-console-errors acceptance)
+ 
+ The B-smoke captured a NEW console warning the A-smoke grep missed (it only counted the key-spread string): "Each child in a list should have a unique key prop... passed a child from Line" — 3 occurrences, not present in the pre-session baseline logs. Root cause: A2's first fix removed the spread (which had smuggled recharts' key in) but also removed the key itself.
+diff --git a/apps/web/.eslintrc.json b/apps/web/.eslintrc.json
+deleted file mode 100644
+index bffb357..0000000
+--- a/apps/web/.eslintrc.json
++++ /dev/null
+@@ -1,3 +0,0 @@
+-{
+-  "extends": "next/core-web-vitals"
+-}
+diff --git a/apps/web/eslint.config.mjs b/apps/web/eslint.config.mjs
+new file mode 100644
+index 0000000..3334eab
+--- /dev/null
++++ b/apps/web/eslint.config.mjs
+@@ -0,0 +1,23 @@
++// S2-E: ESLint CLI migration (next lint is deprecated, removed in Next 16).
++// Flat config via FlatCompat, exactly the create-next-app@15 scaffold — same
++// next/core-web-vitals ruleset as the old .eslintrc.json. Two additions the
++// ESLint CLI needs and `next lint` did silently: global ignores for the build
++// output (.next), and full-project scope (next lint only scanned source dirs,
++// so config files like postcss.config.mjs are now covered too).
++import { dirname } from 'path';
++import { fileURLToPath } from 'url';
++import { FlatCompat } from '@eslint/eslintrc';
++
++const __filename = fileURLToPath(import.meta.url);
++const __dirname = dirname(__filename);
++
++const compat = new FlatCompat({
++  baseDirectory: __dirname,
++});
++
++const eslintConfig = [
++  { ignores: ['.next/**', 'out/**', 'build/**', 'next-env.d.ts'] },
++  ...compat.extends('next/core-web-vitals'),
++];
++
++export default eslintConfig;
+diff --git a/apps/web/package.json b/apps/web/package.json
+index baae284..8fb1397 100644
+--- a/apps/web/package.json
++++ b/apps/web/package.json
+@@ -6,7 +6,7 @@
+     "dev": "next dev",
+     "build": "next build",
+     "start": "next start",
+-    "lint": "next lint",
++    "lint": "eslint .",
+     "db:generate": "prisma generate",
+     "db:push": "prisma db push",
+     "db:seed": "tsx prisma/seed.ts",
+diff --git a/apps/web/postcss.config.mjs b/apps/web/postcss.config.mjs
+index 2aa7205..1a5a8bc 100644
+--- a/apps/web/postcss.config.mjs
++++ b/apps/web/postcss.config.mjs
+@@ -1,6 +1,10 @@
+-export default {
++// S2-E: named const before default export (import/no-anonymous-default-export,
++// surfaced by the ESLint CLI migration - `next lint` never scanned this file).
++const config = {
+   plugins: {
+     tailwindcss: {},
+     autoprefixer: {},
+   },
+ };
++
++export default config;
+diff --git a/apps/web/src/app/log/page.tsx b/apps/web/src/app/log/page.tsx
+index 18164a8..72118b8 100644
+--- a/apps/web/src/app/log/page.tsx
++++ b/apps/web/src/app/log/page.tsx
+@@ -2,6 +2,7 @@
+ 
+ import { useEffect, useMemo, useRef, useState } from 'react';
+ import Link from 'next/link';
++import Image from 'next/image';
+ import AppShell from '@/components/AppShell';
+ import PostMealFeedback from '@/components/PostMealFeedback';
+ import RecentMeals from '@/components/RecentMeals';
+@@ -594,7 +595,11 @@ export default function LogPage() {
+               onChange={(e) => e.target.files?.[0] && handlePhoto(e.target.files[0])}
+               className="text-xs"
+             />
+-            {photoPath && <img src={photoPath} alt="meal" className="h-16 w-16 rounded-lg object-cover" />}
++            {/* S2-E: data-URL photo — next/image with unoptimized (the optimizer
++                cannot handle data URLs); identical rendering to the old <img>. */}
++            {photoPath && (
++              <Image src={photoPath} alt="meal photo" unoptimized width={64} height={64} className="h-16 w-16 rounded-lg object-cover" />
++            )}
+           </div>
+           <p className="mt-2 text-[11px] text-neutral-400">
+             Photo is stored locally for now. Automatic food recognition is a later upgrade - for now, add items below.
+diff --git a/apps/web/src/components/CookWithWhatIHave.tsx b/apps/web/src/components/CookWithWhatIHave.tsx
+index 55083bf..ab59148 100644
+--- a/apps/web/src/components/CookWithWhatIHave.tsx
++++ b/apps/web/src/components/CookWithWhatIHave.tsx
+@@ -15,6 +15,7 @@
+ // Saving works exactly like the catalog browser: POST /api/recipes/from-catalog
+ // (idempotent - 201 fresh / 200 already saved).
+ import { useCallback, useEffect, useRef, useState } from 'react';
++import Image from 'next/image';
+ 
+ type PickerFood = {
+   id: string;
+@@ -449,13 +450,12 @@ function MatchCard({
+       {/* Category image: honest category-level art (not a dish photo), shared
+           by every recipe of this meal x cuisine combo; lazy + fixed 16:10. */}
+       <div className="mb-3 overflow-hidden rounded-xl border border-neutral-200 dark:border-neutral-800">
+-        <img
++        {/* S2-E: next/image — lazy by default, same fixed 16:10 box. */}
++        <Image
+           src={`/images/catalog/cat-${r.mealType}-${r.cuisine}.webp`}
+           alt={`${CUISINE_LABELS[r.cuisine]} ${MEAL_CARD_LABELS[r.mealType]} category card`}
+           width={480}
+           height={300}
+-          loading="lazy"
+-          decoding="async"
+           className="aspect-[16/10] w-full object-cover"
+         />
+       </div>
+diff --git a/apps/web/src/components/RecipeCatalog.tsx b/apps/web/src/components/RecipeCatalog.tsx
+index 4e904fc..6944f4c 100755
+--- a/apps/web/src/components/RecipeCatalog.tsx
++++ b/apps/web/src/components/RecipeCatalog.tsx
+@@ -16,6 +16,7 @@
+ // red). Plain copy only - each recipe carries its own notes, and this page
+ // makes no medical claims.
+ import { useCallback, useEffect, useRef, useState } from 'react';
++import Image from 'next/image';
+ import { CATALOG_MEAL_TYPES, CATALOG_CUISINES, CATALOG_TAGS } from '@mi/food-db';
+ 
+ // Row shape of GET /api/recipes/catalog (defined locally - the repo pattern).
+@@ -494,13 +495,12 @@ function CatalogCard({
+       {/* Category image: honest category-level art (not a dish photo), shared
+           by every recipe of this meal x cuisine combo; lazy + fixed 16:10. */}
+       <div className="mb-3 overflow-hidden rounded-xl border border-neutral-200 dark:border-neutral-800">
+-        <img
++        {/* S2-E: next/image — lazy by default, same fixed 16:10 box. */}
++        <Image
+           src={`/images/catalog/cat-${r.mealType}-${r.cuisine}.webp`}
+           alt={`${CUISINE_LABELS[r.cuisine]} ${MEAL_CARD_LABELS[r.mealType]} category card`}
+           width={480}
+           height={300}
+-          loading="lazy"
+-          decoding="async"
+           className="aspect-[16/10] w-full object-cover"
+         />
+       </div>
+-- 
+2.47.3
+

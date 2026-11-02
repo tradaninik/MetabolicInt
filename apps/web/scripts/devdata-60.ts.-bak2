@@ -1,0 +1,427 @@
+// devdata-60.ts - deterministic 60-day demo dataset (demo user only).
+// Installed and run by MetabolicInt-2b.ps1. Local file: SQLite only.
+// Idempotent: each run replaces its own trailing 60-day window.
+// Signals encoded (learnable, not noise): per-food GI-driven response,
+// a distinct evening effect at dinner, post-dinner walk attenuation,
+// short-sleep next-morning penalty, slow weight/BP drift, festive days.
+// No .env is read; the DB file is chosen by probing candidates.
+import { PrismaClient } from '@prisma/client';
+import * as fs from 'fs';
+import * as path from 'path';
+
+const DRY = process.argv.includes('--dry');
+const DBI = process.argv.indexOf('--db');
+const DBOPT = DBI >= 0 && DBI + 1 < process.argv.length
+  ? process.argv[DBI + 1] : '';
+
+const out = (s: string) => console.log(s);
+function fail(s: string) {
+  console.log('ERR ' + s);
+  process.exit(1);
+}
+
+function rng(seed: number) {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const rnd = rng(606060);
+const ri = (lo: number, hi: number) =>
+  lo + Math.floor(rnd() * (hi - lo + 1));
+const rf = (lo: number, hi: number) => lo + rnd() * (hi - lo);
+const cl = (v: number, lo: number, hi: number) =>
+  Math.max(lo, Math.min(hi, v));
+const r1 = (v: number) => Math.round(v * 10) / 10;
+
+const webDir = process.cwd();
+const schemaPath = path.join(webDir, 'prisma', 'schema.prisma');
+if (!fs.existsSync(schemaPath)) fail('schema.prisma not found under cwd');
+const schemaTxt = fs.readFileSync(schemaPath, 'utf8');
+const dsm = schemaTxt.match(/^datasource\s+([A-Za-z0-9_]+)/m);
+const dsName = dsm ? dsm[1] : 'db';
+
+function urlFor(p: string) {
+  return 'file:' + p.split(path.sep).join('/');
+}
+function mkClient(url: string) {
+  const ds: Record<string, { url: string }> = {};
+  ds[dsName] = { url };
+  return new PrismaClient({ datasources: ds } as any);
+}
+
+type F = { id: string; name: string; katoriGrams: number | null;
+  servingGrams: number; kcalPer100g: number; carbsPer100g: number;
+  proteinPer100g: number; fatPer100g: number; gi: number };
+type Cand = { p: string; users: number; demo: boolean; last: Date | null };
+
+async function main() {
+  const cands: string[] = [];
+  if (DBOPT) cands.push(path.resolve(DBOPT));
+  cands.push(path.join(webDir, 'prisma', 'dev.db'));
+  cands.push(path.join(webDir, 'dev.db'));
+  const uniq = Array.from(new Set(cands));
+
+  const found: Cand[] = [];
+  for (const p of uniq) {
+    if (!fs.existsSync(p)) continue;
+    const c = mkClient(urlFor(p));
+    try {
+      const users = await c.user.count();
+      const demo = await c.user.findUnique({
+        where: { email: 'demo@metabolic.dev' } });
+      let last: Date | null = null;
+      if (demo) {
+        const g = await c.glucoseReading.findFirst({
+          where: { userId: demo.id }, orderBy: { takenAt: 'desc' },
+          select: { takenAt: true } });
+        last = g ? g.takenAt : null;
+      }
+      found.push({ p, users, demo: !!demo, last });
+      out('CAND ' + p + ' users=' + users + ' demo=' +
+        (demo ? 'yes' : 'no') + ' last=' +
+        (last ? last.toISOString().slice(0, 10) : 'none'));
+    } catch (e: any) {
+      out('CAND ' + p + ' unreadable=' + String(e.message).slice(0, 50));
+    }
+    await c.$disconnect();
+  }
+  const demos = found.filter(x => x.demo);
+  if (demos.length === 0) {
+    fail('no demo@metabolic.dev in any candidate - run db:push + db:seed');
+  }
+  demos.sort((a, b) => (b.last ? b.last.getTime() : 0) -
+    (a.last ? a.last.getTime() : 0));
+  if (demos.length > 1) {
+    out('NOTE multiple DBs have the demo user - picking most recent');
+  }
+  const target = demos[0].p;
+  out('DETDB ' + target);
+  const cli = mkClient(urlFor(target));
+  const demo = await cli.user.findUnique({
+    where: { email: 'demo@metabolic.dev' } });
+  if (!demo) fail('demo user vanished between probe and connect');
+  const uid = demo.id;
+
+  const foodRows: F[] = await cli.food.findMany({ select: { id: true,
+    name: true, katoriGrams: true, servingGrams: true,
+    kcalPer100g: true, carbsPer100g: true, proteinPer100g: true,
+    fatPer100g: true, gi: true } });
+  if (foodRows.length < 50) {
+    fail('food catalog too small (' + foodRows.length + ') - run db:seed');
+  }
+
+  function matchPool(tokens: string[]): F[] {
+    return foodRows.filter(f =>
+      tokens.some(t => f.name.toLowerCase().includes(t)));
+  }
+  const breakfastP = matchPool(['idli', 'dosa', 'upma', 'poha', 'paratha',
+    'egg', 'pong']);
+  const stapleP = matchPool(['rice', 'biryani', 'khichdi', 'chapati',
+    'roti']);
+  const dalP = matchPool(['dal', 'sambar', 'rajma', 'chole', 'kootu']);
+  const sideP = matchPool(['curd', 'yogurt', 'raita', 'paneer', 'fish',
+    'chicken', 'vegetable', 'salad', 'beans', 'poriyal']);
+  const snackP = matchPool(['tea', 'coffee', 'milk', 'banana', 'apple',
+    'papaya', 'guava']);
+  const sweetP = matchPool(['ladoo', 'halwa', 'jalebi', 'kheer', 'payasam',
+    'sweet']);
+  out('POOLS breakfast=' + breakfastP.length + ' staple=' +
+    stapleP.length + ' dal=' + dalP.length + ' side=' + sideP.length +
+    ' snack=' + snackP.length + ' sweet=' + sweetP.length);
+  if (breakfastP.length < 2 || stapleP.length < 2 || dalP.length < 1 ||
+      sideP.length < 2 || snackP.length < 1) {
+    fail('matched food pools too thin - see POOLS line above');
+  }
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const winStart = new Date(today);
+  winStart.setDate(today.getDate() - 59);
+  const winEnd = new Date(today);
+  winEnd.setDate(today.getDate() + 1);
+  function dayAt(d: number, h: number, mi: number) {
+    const dt = new Date(today);
+    dt.setDate(today.getDate() - 59 + d);
+    dt.setHours(h, mi, 0, 0);
+    return dt;
+  }
+  const isWknd = (d: number) => {
+    const wd = dayAt(d, 3, 0).getDay();
+    return wd === 0 || wd === 6;
+  };
+
+  type ItemRec = { f: F; role: string; grams: number;
+    portionType: string; portionValue: number; kcal: number;
+    carbsG: number; proteinG: number; fatG: number };
+  function makeItem(f: F, role: string): ItemRec {
+    let pt = 'serving';
+    let pv = role === 'staple' ? rf(1.2, 1.6) : rf(0.8, 1.1);
+    let grams = f.servingGrams * pv;
+    if (f.katoriGrams && f.katoriGrams > 0) {
+      pt = 'katori';
+      pv = role === 'staple' ? rf(1.5, 2) : rf(0.8, 1.2);
+      grams = f.katoriGrams * pv;
+    }
+    const g = Math.round(grams);
+    const k = g / 100;
+    return { f, role, grams: g, portionType: pt, portionValue: r1(pv),
+      kcal: r1(f.kcalPer100g * k), carbsG: r1(f.carbsPer100g * k),
+      proteinG: r1(f.proteinPer100g * k), fatG: r1(f.fatPer100g * k) };
+  }
+  function pickFrom(arr: F[], d: number, slot: number, salt: number,
+    k: number): F[] {
+    const res: F[] = [];
+    const used = new Set<string>();
+    let tries = 0;
+    while (res.length < k && tries < 40 && arr.length > 0) {
+      const idx = (d * 7 + slot * 5 + salt + res.length * 3 + ri(0, 2)) %
+        arr.length;
+      tries++;
+      const f = arr[idx];
+      if (!used.has(f.id)) { used.add(f.id); res.push(f); }
+    }
+    return res;
+  }
+  function buildMeal(d: number, slot: number, fest: boolean): ItemRec[] {
+    if (slot === 0) return pickFrom(breakfastP, d, 0, 1, 2)
+      .map(f => makeItem(f, 'staple'));
+    if (slot === 2) return pickFrom(snackP, d, 2, 3, 1)
+      .map(f => makeItem(f, 'side'));
+    if (slot === 1) {
+      const its = [
+        ...pickFrom(stapleP, d, 1, 5, 1).map(f => makeItem(f, 'staple')),
+        ...pickFrom(dalP, d, 1, 7, 1).map(f => makeItem(f, 'side')),
+        ...pickFrom(sideP, d, 1, 9, 1).map(f => makeItem(f, 'side')),
+      ];
+      if (fest && sweetP.length) {
+        its.push(makeItem(sweetP[(d * 3) % sweetP.length], 'staple'));
+      }
+      return its;
+    }
+    const dn = [
+      ...pickFrom(stapleP, d, 3, 11, 1).map(f => makeItem(f, 'staple')),
+      ...pickFrom(sideP, d, 3, 13, 1).map(f => makeItem(f, 'side')),
+    ];
+    if (rnd() < 0.4) {
+      dn.push(...pickFrom(dalP, d, 3, 15, 1).map(f => makeItem(f, 'side')));
+    }
+    if (fest && sweetP.length) {
+      dn.push(makeItem(sweetP[(d * 5) % sweetP.length], 'staple'));
+    }
+    return dn;
+  }
+
+  const sleepH: number[] = [];
+  const sleepRows: any[] = [];
+  for (let d = 0; d < 60; d++) {
+    const wknd = isWknd(d);
+    let h = wknd ? rf(6.6, 8.0) : rf(5.6, 6.9);
+    if (d > 0 && (d - 1 === 17 || d - 1 === 45)) h -= 0.8;
+    h = cl(h, 5.2, 8.4);
+    sleepH.push(h);
+    sleepRows.push({ id: 'dev60-sp-' + d, userId: uid, hours: r1(h),
+      wokeAt: dayAt(d, wknd ? 8 : 7, wknd ? 20 : 10) });
+  }
+  const fastVal: number[] = [];
+  for (let d = 0; d < 60; d++) {
+    let v = 133 - 0.05 * d + rf(-5, 5);
+    if (d > 0 && sleepH[d - 1] < 6) v += 7;
+    fastVal.push(cl(Math.round(v), 105, 165));
+  }
+
+  const SLOT_ADJ = [0, 4, 2, 7];
+  const SLOT_MULT = [0.95, 1.0, 1.0, 1.12];
+  const fe: any[] = [];
+  const gluc: any[] = [];
+  const act: any[] = [];
+  const wt: any[] = [];
+  const bp: any[] = [];
+  let feSeq = 0; let glSeq = 0; let acSeq = 0;
+  let wtSeq = 0; let bpSeq = 0;
+  let meals = 0;
+  for (let d = 0; d < 60; d++) {
+    const wknd = isWknd(d);
+    const fest = d === 17 || d === 45;
+    const slots: { slot: number; h: number; mi: number }[] = [
+      { slot: 0, h: wknd ? 9 : 8, mi: wknd ? 15 : 0 },
+      { slot: 1, h: wknd ? 14 : 13, mi: wknd ? 30 : 0 },
+      { slot: 3, h: wknd ? 21 : 20, mi: 30 },
+    ];
+    if (fest || rnd() < 0.4) slots.push({ slot: 2, h: 17, mi: 0 });
+    const eveningWalk = rnd() < 0.6;
+    const morningWalk = !wknd && rnd() < 0.12;
+    const yoga = rnd() < 0.12;
+    for (const s of slots) {
+      const at = dayAt(d, s.h, s.mi);
+      const items = buildMeal(d, s.slot, fest);
+      meals++;
+      for (const it of items) {
+        fe.push({ id: 'dev60-fe-' + (feSeq++), userId: uid,
+          foodId: it.f.id, portionType: it.portionType,
+          portionValue: it.portionValue, grams: it.grams, kcal: it.kcal,
+          carbsG: it.carbsG, proteinG: it.proteinG, fatG: it.fatG,
+          loggedAt: at });
+      }
+      const prob = s.slot === 1 ? (fest ? 1 : 0.75) :
+        (s.slot === 0 ? 0.25 : (s.slot === 3 ? 0.8 : 0));
+      if (prob > 0 && rnd() < prob) {
+        const eff = items.reduce((s2, it2) =>
+          s2 + it2.carbsG * (0.55 + it2.f.gi / 150), 0);
+        const walkMult = s.slot === 3 && eveningWalk ? 0.78 : 1;
+        const festMult = fest ? 1.15 : 1;
+        const rise = eff * 0.5 * 1.08 * SLOT_MULT[s.slot] * walkMult *
+          festMult + rf(-7, 7);
+        const val = cl(Math.round(fastVal[d] + SLOT_ADJ[s.slot] + rise),
+          95, 290);
+        const ta = new Date(at.getTime() + 115 * 60000);
+        gluc.push({ id: 'dev60-gl-' + (glSeq++), userId: uid, value: val,
+          source: 'manual', takenAt: ta });
+      }
+    }
+    if (eveningWalk) {
+      act.push({ id: 'dev60-ac-' + (acSeq++), userId: uid, type: 'walk',
+        durationMin: ri(20, 35), source: 'manual', at: dayAt(d, 21, 15) });
+    }
+    if (morningWalk) {
+      act.push({ id: 'dev60-ac-' + (acSeq++), userId: uid, type: 'walk',
+        durationMin: ri(15, 25), source: 'manual', at: dayAt(d, 7, 0) });
+    }
+    if (yoga) {
+      act.push({ id: 'dev60-ac-' + (acSeq++), userId: uid, type: 'yoga',
+        durationMin: ri(15, 25), source: 'manual', at: dayAt(d, 6, 30) });
+    }
+    if (rnd() < 0.15) {
+      gluc.push({ id: 'dev60-gl-' + (glSeq++), userId: uid,
+        value: cl(Math.round(fastVal[d] - 4 + rf(-5, 5)), 95, 180),
+        source: 'manual', takenAt: dayAt(d, 22, 30) });
+    }
+    if (d % 7 === 3) {
+      wt.push({ id: 'dev60-wt-' + (wtSeq++), userId: uid,
+        kg: r1(84 - 0.028 * d + rf(-0.2, 0.2)), takenAt: dayAt(d, 8, 0) });
+    }
+    if (d % 3 === 1) {
+      bp.push({ id: 'dev60-bp-' + (bpSeq++), userId: uid,
+        systolic: Math.round(136 - 0.04 * d + rf(-4, 4)),
+        diastolic: Math.round(86 - 0.03 * d + rf(-3, 3)),
+        takenAt: dayAt(d, 9, 30) });
+    }
+  }
+  out('PLAN days=60 meals=' + meals + ' entries=' + fe.length +
+    ' glucose=' + gluc.length + ' activity=' + act.length + ' sleep=' +
+    sleepRows.length + ' weight=' + wt.length + ' bp=' + bp.length);
+
+  const nameOf = (id: string) => {
+    const f = foodRows.find(x => x.id === id);
+    return f ? f.name : id;
+  };
+  function topFoods(rows: { foodId: string }[], n: number) {
+    const m = new Map<string, number>();
+    for (const r of rows) m.set(r.foodId, (m.get(r.foodId) || 0) + 1);
+    return Array.from(m.entries()).sort((a, b) => b[1] - a[1]).slice(0, n);
+  }
+
+  if (DRY) {
+    out('PREVIEW ' + topFoods(fe, 8)
+      .map(e => nameOf(e[0]) + ' x' + e[1]).join('; '));
+    out('DRY-OK no changes made');
+    await cli.$disconnect();
+    process.exit(0);
+  }
+
+  const bak = target + '.-bak60';
+  if (fs.existsSync(bak)) {
+    out('BACKUP kept existing ' + bak);
+  } else {
+    fs.copyFileSync(target, bak);
+    out('BACKUP created ' + bak);
+  }
+
+  const old = await cli.$transaction(async (tx) => {
+    const a1 = await tx.foodEntry.deleteMany({ where: { userId: uid,
+      loggedAt: { gte: winStart, lt: winEnd } } });
+    const a2 = await tx.glucoseReading.deleteMany({ where: { userId: uid,
+      takenAt: { gte: winStart, lt: winEnd } } });
+    const a3 = await tx.activityEntry.deleteMany({ where: { userId: uid,
+      at: { gte: winStart, lt: winEnd } } });
+    const a4 = await tx.sleepEntry.deleteMany({ where: { userId: uid,
+      wokeAt: { gte: winStart, lt: winEnd } } });
+    const a5 = await tx.weightEntry.deleteMany({ where: { userId: uid,
+      takenAt: { gte: winStart, lt: winEnd } } });
+    const a6 = await tx.bloodPressureEntry.deleteMany({
+      where: { userId: uid, takenAt: { gte: winStart, lt: winEnd } } });
+    for (const r of fe) await tx.foodEntry.create({ data: r });
+    for (const r of gluc) await tx.glucoseReading.create({ data: r });
+    for (const r of act) await tx.activityEntry.create({ data: r });
+    for (const r of sleepRows) await tx.sleepEntry.create({ data: r });
+    for (const r of wt) await tx.weightEntry.create({ data: r });
+    for (const r of bp) await tx.bloodPressureEntry.create({ data: r });
+    return [a1.count, a2.count, a3.count, a4.count, a5.count, a6.count];
+  }, { timeout: 60000, maxWait: 20000 });
+  out('DELETED old entries=' + old[0] + ' glucose=' + old[1] +
+    ' activity=' + old[2] + ' sleep=' + old[3] + ' weight=' + old[4] +
+    ' bp=' + old[5]);
+  out('WRITE-OK entries=' + fe.length + ' glucose=' + gluc.length +
+    ' activity=' + act.length + ' sleep=' + sleepRows.length +
+    ' weight=' + wt.length + ' bp=' + bp.length);
+
+  const c1 = await cli.foodEntry.count({ where: { userId: uid,
+    loggedAt: { gte: winStart, lt: winEnd } } });
+  const c2 = await cli.glucoseReading.count({ where: { userId: uid,
+    takenAt: { gte: winStart, lt: winEnd } } });
+  const c3 = await cli.activityEntry.count({ where: { userId: uid,
+    at: { gte: winStart, lt: winEnd } } });
+  const c4 = await cli.sleepEntry.count({ where: { userId: uid,
+    wokeAt: { gte: winStart, lt: winEnd } } });
+  const c5 = await cli.weightEntry.count({ where: { userId: uid,
+    takenAt: { gte: winStart, lt: winEnd } } });
+  const c6 = await cli.bloodPressureEntry.count({ where: { userId: uid,
+    takenAt: { gte: winStart, lt: winEnd } } });
+  if (c1 !== fe.length || c2 !== gluc.length || c3 !== act.length ||
+      c4 !== sleepRows.length || c5 !== wt.length || c6 !== bp.length) {
+    fail('verify mismatch: ' + c1 + '/' + c2 + '/' + c3 + '/' + c4 + '/' +
+      c5 + '/' + c6);
+  }
+  out('VERIFY entries=' + c1 + ' glucose=' + c2 + ' activity=' + c3 +
+    ' sleep=' + c4 + ' weight=' + c5 + ' bp=' + c6);
+
+  const gl2 = await cli.glucoseReading.findMany({ where: { userId: uid,
+    takenAt: { gte: winStart, lt: winEnd } },
+    select: { value: true, takenAt: true } });
+  const act2 = await cli.activityEntry.findMany({ where: { userId: uid,
+    at: { gte: winStart, lt: winEnd } },
+    select: { type: true, at: true } });
+  const dkey = (dt: Date) => dt.getFullYear() + '-' + dt.getMonth() + '-' +
+    dt.getDate();
+  const walkDates = new Set<string>();
+  for (const a of act2) {
+    if (a.type === 'walk' && a.at.getHours() >= 20) walkDates.add(dkey(a.at));
+  }
+  const fast = gl2.filter(g => g.takenAt.getHours() >= 6 &&
+    g.takenAt.getHours() < 9);
+  const even = gl2.filter(g => g.takenAt.getHours() >= 20);
+  const evWalk = even.filter(g => walkDates.has(dkey(g.takenAt)));
+  const evNo = even.filter(g => !walkDates.has(dkey(g.takenAt)));
+  const avg = (arr: { value: number }[]) => arr.length
+    ? r1(arr.reduce((s, x) => s + x.value, 0) / arr.length) : 0;
+  out('STATS fasting ' + avg(fast) + ' | evening ' + avg(even) +
+    ' | walk-days ' + avg(evWalk) + ' | no-walk ' + avg(evNo));
+
+  const fe2 = await cli.foodEntry.findMany({ where: { userId: uid,
+    loggedAt: { gte: winStart, lt: winEnd } },
+    select: { foodId: true, loggedAt: true } });
+  out('TOPFOODS ' + topFoods(fe2, 8)
+    .map(e => nameOf(e[0]) + ' x' + e[1]).join('; '));
+  const din = fe2.filter(e => e.loggedAt.getHours() >= 19 &&
+    e.loggedAt.getHours() < 23);
+  out('DINNER ' + topFoods(din, 5)
+    .map(e => nameOf(e[0]) + ' x' + e[1]).join('; '));
+  out('VERIFY-OK');
+  out('ALL-OK');
+  await cli.$disconnect();
+}
+
+main().catch(e => fail(String((e && e.message) || e).slice(0, 180)));

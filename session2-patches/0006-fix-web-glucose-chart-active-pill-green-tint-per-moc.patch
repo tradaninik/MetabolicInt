@@ -1,0 +1,50 @@
+From 4e147b0657232edd199bb2972309cabb8dbec41f Mon Sep 17 00:00:00 2001
+From: Z User <z@container>
+Date: Wed, 28 Oct 2026 16:37:53 +0000
+Subject: [PATCH 06/16] fix(web): glucose chart active pill green tint per
+ mockup v1 (S2-A10)
+
+Selected range pill: solid bg-brand-600/white -> brand-100 tint with
+brand-800 text (dark-mode pair), matching the app's selected-nav
+pattern. Gates all green.
+---
+ WORKLOG.md                                              | 9 +++++++++
+ apps/web/src/components/dashboard/GlucoseTodayChart.tsx | 2 +-
+ 2 files changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/WORKLOG.md b/WORKLOG.md
+index 32e2955..c12a664 100644
+--- a/WORKLOG.md
++++ b/WORKLOG.md
+@@ -2,6 +2,15 @@
+ 
+ ---
+ 
++## 2026-10-29 - Session 2, A10: glucose chart active pill = green tint
++
++Mission A (mockup fidelity). Mockup: the selected range pill is a light-green tint with dark-green text; the implementation used a solid dark-green pill with white text.
++
++- Fix (GlucoseTodayChart.tsx): active pill -> bg-brand-100 + text-brand-800 (dark: brand-900/40 + brand-200), matching the app's existing selected-nav pattern; inactive pills unchanged.
++- Gates: 616 passed + 3 skipped · tsc ×3 silent · lint = the 3 known `<img>` warnings · build "Compiled successfully".
++
++---
++
+ ## 2026-10-29 - Session 2, A9: sidebar brand = MetabolicInt + heart mark
+ 
+ Mission A (mockup fidelity). Mockup brand: "MetabolicInt" + "Personal metabolic model" subtitle + heart-in-rounded-square mark; implementation read "Metabolic" with a plain green square.
+diff --git a/apps/web/src/components/dashboard/GlucoseTodayChart.tsx b/apps/web/src/components/dashboard/GlucoseTodayChart.tsx
+index 5250df5..8e92247 100644
+--- a/apps/web/src/components/dashboard/GlucoseTodayChart.tsx
++++ b/apps/web/src/components/dashboard/GlucoseTodayChart.tsx
+@@ -129,7 +129,7 @@ export default function GlucoseTodayChart({ chart }: { chart: GlucoseChartData }
+               onClick={() => setRange(r)}
+               className={`rounded-full px-3 py-1 transition ${
+                 range === r
+-                  ? 'bg-brand-600 font-medium text-white'
++                  ? 'bg-brand-100 font-medium text-brand-800 dark:bg-brand-900/40 dark:text-brand-200'
+                   : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
+               }`}
+             >
+-- 
+2.47.3
+

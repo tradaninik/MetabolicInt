@@ -1,0 +1,92 @@
+From 54529de724f2a2e500229013ff58489845d75930 Mon Sep 17 00:00:00 2001
+From: Z User <z@container>
+Date: Wed, 28 Oct 2026 16:34:05 +0000
+Subject: [PATCH 03/16] fix(web): seasonal + agni cards side-by-side per mockup
+ v1 (S2-A7)
+
+Mockup bottom row = two cards in one row; implementation stacked them
+full-width. Wrap in lg:grid-cols-2 (stacked on mobile), equal-height
+via flex h-full; components drop their own mt-4. Honest titles kept
+('Agni rhythm today', not the mockup's 'planner' - that is Phase 3).
+Gates all green.
+---
+ WORKLOG.md                                 |  9 +++++++++
+ apps/web/src/app/dashboard/page.tsx        | 14 +++++++++-----
+ apps/web/src/components/AgniRhythmCard.tsx |  2 +-
+ apps/web/src/components/SeasonalCard.tsx   |  2 +-
+ 4 files changed, 20 insertions(+), 7 deletions(-)
+
+diff --git a/WORKLOG.md b/WORKLOG.md
+index d1f2719..8e10886 100644
+--- a/WORKLOG.md
++++ b/WORKLOG.md
+@@ -2,6 +2,15 @@
+ 
+ ---
+ 
++## 2026-10-29 - Session 2, A7: seasonal + agni side-by-side bottom row
++
++Mission A (mockup fidelity). The mockup bottom row shows "Season · Ritucharya" and "Agni rhythm" as two cards side by side; the implementation stacked them full-width.
++
++- Fix: wrap SeasonalCard + AgniRhythmCard in a `lg:grid-cols-2` row on the dashboard (stacked on mobile). Both components drop their own `mt-4` (spacing now owned by the grid) and gain `flex h-full flex-col` so the pair renders equal-height like the mockup. Titles stay honest: "This month: {season}" / "Agni rhythm today" — the mockup's "planner" wording promises Phase-3 planning features that don't exist yet.
++- Gates: 616 passed + 3 skipped · tsc ×3 silent · lint = the 3 known `<img>` warnings · build "Compiled successfully".
++
++---
++
+ ## 2026-10-29 - Session 2, A6: metabolic timeline moved below the charts row
+ 
+ Mission A (mockup fidelity, dashboard-mockup-v1.png). The approved mockup order is metric cards → glucose chart + investigate → **timeline** → score/weight/insights → suggestions → seasonal + agni → footer; the implementation had the timeline dead-last, after Seasonal and Agni.
+diff --git a/apps/web/src/app/dashboard/page.tsx b/apps/web/src/app/dashboard/page.tsx
+index 9de4286..8a82b9b 100644
+--- a/apps/web/src/app/dashboard/page.tsx
++++ b/apps/web/src/app/dashboard/page.tsx
+@@ -151,11 +151,15 @@ export default async function DashboardPage() {
+           <SuggestionsCard suggestions={data.suggestions} today={istDayBounds(Date.now()).dateStr} />
+         </div>
+ 
+-        {/* Seasonal guidance (U14 Ritucharya) */}
+-        <SeasonalCard />
+-
+-        {/* Agni rhythm (P4c-b U17) */}
+-        <AgniRhythmCard userId={session.user.id} />
++        {/* Seasonal + agni side-by-side per the approved v1 mockup bottom row
++            (stacked on mobile; each card stretches to equal height). */}
++        <div className="mt-4 grid gap-4 lg:grid-cols-2">
++          {/* Seasonal guidance (U14 Ritucharya) */}
++          <SeasonalCard />
++
++          {/* Agni rhythm (P4c-b U17) */}
++          <AgniRhythmCard userId={session.user.id} />
++        </div>
+ 
+         {/* Provenance line (revamp item 7, approved v1 footer): everything on
+             this page is the user's own data, and every save re-renders it via
+diff --git a/apps/web/src/components/AgniRhythmCard.tsx b/apps/web/src/components/AgniRhythmCard.tsx
+index cf7fe0b..f9315bc 100644
+--- a/apps/web/src/components/AgniRhythmCard.tsx
++++ b/apps/web/src/components/AgniRhythmCard.tsx
+@@ -55,7 +55,7 @@ export default async function AgniRhythmCard({ userId }: { userId: string }) {
+     : [];
+ 
+   return (
+-    <section className="mt-4 rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-950">
++    <section className="flex h-full flex-col rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-950">
+       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+         <div>
+           <h2 className="text-sm font-semibold">Agni rhythm today</h2>
+diff --git a/apps/web/src/components/SeasonalCard.tsx b/apps/web/src/components/SeasonalCard.tsx
+index 4192222..5117d29 100644
+--- a/apps/web/src/components/SeasonalCard.tsx
++++ b/apps/web/src/components/SeasonalCard.tsx
+@@ -10,7 +10,7 @@ export default function SeasonalCard() {
+   const card = ritucharyaCard(ritucharyaSeason(month));
+ 
+   return (
+-    <section className="mt-4 rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-950">
++    <section className="flex h-full flex-col rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-950">
+       <div className="mb-4">
+         <h2 className="text-sm font-semibold">This month: {card.name}</h2>
+         <p className="text-xs text-neutral-500">Seasonal routine (Ritucharya) · {card.window}</p>
+-- 
+2.47.3
+

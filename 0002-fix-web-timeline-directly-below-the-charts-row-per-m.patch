@@ -1,0 +1,67 @@
+From 57ba1bcb27ef64ab3f28f71003ebfa7eff74e4dd Mon Sep 17 00:00:00 2001
+From: Z User <z@container>
+Date: Wed, 28 Oct 2026 16:32:37 +0000
+Subject: [PATCH 02/16] fix(web): timeline directly below the charts row per
+ mockup v1 (S2-A6)
+
+Mockup order: metric cards -> glucose chart + investigate -> timeline
+-> score/weight/insights -> suggestions -> seasonal + agni -> footer.
+The implementation rendered the timeline dead-last; move the block up.
+Pure JSX move, zero component/data changes. Gates all green.
+---
+ WORKLOG.md                          |  9 +++++++++
+ apps/web/src/app/dashboard/page.tsx | 11 ++++++-----
+ 2 files changed, 15 insertions(+), 5 deletions(-)
+
+diff --git a/WORKLOG.md b/WORKLOG.md
+index b16d011..d1f2719 100644
+--- a/WORKLOG.md
++++ b/WORKLOG.md
+@@ -2,6 +2,15 @@
+ 
+ ---
+ 
++## 2026-10-29 - Session 2, A6: metabolic timeline moved below the charts row
++
++Mission A (mockup fidelity, dashboard-mockup-v1.png). The approved mockup order is metric cards → glucose chart + investigate → **timeline** → score/weight/insights → suggestions → seasonal + agni → footer; the implementation had the timeline dead-last, after Seasonal and Agni.
++
++- Fix: move the MetabolicTimeline block in app/dashboard/page.tsx to directly below the charts row. Pure JSX move; zero component or data changes.
++- Gates: 616 passed + 3 skipped · tsc ×3 silent · lint = the 3 known `<img>` warnings · build "Compiled successfully".
++
++---
++
+ ## 2026-10-29 - Session 2, A2: MeasuredDot key-spread console fix
+ 
+ Mission A (dashboard visual fidelity). The only console error on /dashboard (all widths, local + prod) was React's "props object containing a `key` prop is being spread into JSX" from GlucoseTodayChart's dot renderer: recharts passes `key` inside the dot props, and the callback spread `{...p}` into `<MeasuredDot>`.
+diff --git a/apps/web/src/app/dashboard/page.tsx b/apps/web/src/app/dashboard/page.tsx
+index 50c145e..9de4286 100644
+--- a/apps/web/src/app/dashboard/page.tsx
++++ b/apps/web/src/app/dashboard/page.tsx
+@@ -85,6 +85,12 @@ export default async function DashboardPage() {
+           <WhyHighCard attribution={data.attribution} glucose={metricCards.glucose} />
+         </div>
+ 
++        {/* Horizontal metabolic timeline (revamp item 5) - directly below the
++            charts row per the approved v1 mockup (was page-bottom before). */}
++        <div className="mt-4">
++          <MetabolicTimeline items={data.metabolicTimeline} />
++        </div>
++
+         {/* Score + forecast + insights (score moved beside them by the v1 layout) */}
+         <div className="mt-4 grid gap-4 lg:grid-cols-3">
+           <Card title="Metabolic Health Score" subtitle="0–100 composite · last 14 days">
+@@ -151,11 +157,6 @@ export default async function DashboardPage() {
+         {/* Agni rhythm (P4c-b U17) */}
+         <AgniRhythmCard userId={session.user.id} />
+ 
+-        {/* Horizontal metabolic timeline (revamp item 5) */}
+-        <div className="mt-4">
+-          <MetabolicTimeline items={data.metabolicTimeline} />
+-        </div>
+-
+         {/* Provenance line (revamp item 7, approved v1 footer): everything on
+             this page is the user's own data, and every save re-renders it via
+             router.refresh() (QuickAdd / check-in pattern). Honest statement,
+-- 
+2.47.3
+

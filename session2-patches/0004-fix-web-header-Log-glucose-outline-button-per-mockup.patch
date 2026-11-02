@@ -1,0 +1,64 @@
+From 1b3377b2352d606baf9c0659e58badca1f64cc13 Mon Sep 17 00:00:00 2001
+From: Z User <z@container>
+Date: Wed, 28 Oct 2026 16:35:18 +0000
+Subject: [PATCH 04/16] fix(web): header Log glucose outline button per mockup
+ v1 (S2-A8)
+
+Mockup header has two actions: outline 'Log glucose' + solid
+'+ Log a meal'. Add the outline link to /glucose (Log a reading
+section) beside the existing button. Gates all green.
+---
+ WORKLOG.md                          |  9 +++++++++
+ apps/web/src/app/dashboard/page.tsx | 16 +++++++++++++---
+ 2 files changed, 22 insertions(+), 3 deletions(-)
+
+diff --git a/WORKLOG.md b/WORKLOG.md
+index 8e10886..4c45fa3 100644
+--- a/WORKLOG.md
++++ b/WORKLOG.md
+@@ -2,6 +2,15 @@
+ 
+ ---
+ 
++## 2026-10-29 - Session 2, A8: header "Log glucose" outline button
++
++Mission A (mockup fidelity). The mockup header carries two actions - "Log glucose" (outline) + "+ Log a meal" (solid green); the implementation had only the meal button.
++
++- Fix: add the outline "Log glucose" link to /glucose (its "Log a reading" section) beside the existing solid button, wrapped in a flex gap row. Dark-mode styling included.
++- Gates: 616 passed + 3 skipped · tsc ×3 silent · lint = the 3 known `<img>` warnings · build "Compiled successfully".
++
++---
++
+ ## 2026-10-29 - Session 2, A7: seasonal + agni side-by-side bottom row
+ 
+ Mission A (mockup fidelity). The mockup bottom row shows "Season · Ritucharya" and "Agni rhythm" as two cards side by side; the implementation stacked them full-width.
+diff --git a/apps/web/src/app/dashboard/page.tsx b/apps/web/src/app/dashboard/page.tsx
+index 8a82b9b..9087cc2 100644
+--- a/apps/web/src/app/dashboard/page.tsx
++++ b/apps/web/src/app/dashboard/page.tsx
+@@ -59,9 +59,19 @@ export default async function DashboardPage() {
+                 : <span className="ml-1 rounded-full bg-brand-100 px-2 py-0.5 text-[10px] text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">learned</span>}
+             </p>
+           </div>
+-          <Link href="/log" className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
+-            + Log a meal
+-          </Link>
++          <div className="flex flex-wrap gap-2">
++            {/* Two header actions per the approved v1 mockup: outline
++                "Log glucose" (-> /glucose "Log a reading") + solid "+ Log a meal". */}
++            <Link
++              href="/glucose"
++              className="rounded-lg border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-700 hover:border-neutral-400 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-200 dark:hover:bg-neutral-900"
++            >
++              Log glucose
++            </Link>
++            <Link href="/log" className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
++              + Log a meal
++            </Link>
++          </div>
+         </div>
+ 
+         {/* Disclaimer */}
+-- 
+2.47.3
+

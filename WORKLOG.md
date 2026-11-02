@@ -2,6 +2,42 @@
 
 ---
 
+## 2026-10-29 - Session 2, A8: header "Log glucose" outline button
+
+Mission A (mockup fidelity). The mockup header carries two actions - "Log glucose" (outline) + "+ Log a meal" (solid green); the implementation had only the meal button.
+
+- Fix: add the outline "Log glucose" link to /glucose (its "Log a reading" section) beside the existing solid button, wrapped in a flex gap row. Dark-mode styling included.
+- Gates: 616 passed + 3 skipped · tsc ×3 silent · lint = the 3 known `<img>` warnings · build "Compiled successfully".
+
+---
+
+## 2026-10-29 - Session 2, A7: seasonal + agni side-by-side bottom row
+
+Mission A (mockup fidelity). The mockup bottom row shows "Season · Ritucharya" and "Agni rhythm" as two cards side by side; the implementation stacked them full-width.
+
+- Fix: wrap SeasonalCard + AgniRhythmCard in a `lg:grid-cols-2` row on the dashboard (stacked on mobile). Both components drop their own `mt-4` (spacing now owned by the grid) and gain `flex h-full flex-col` so the pair renders equal-height like the mockup. Titles stay honest: "This month: {season}" / "Agni rhythm today" — the mockup's "planner" wording promises Phase-3 planning features that don't exist yet.
+- Gates: 616 passed + 3 skipped · tsc ×3 silent · lint = the 3 known `<img>` warnings · build "Compiled successfully".
+
+---
+
+## 2026-10-29 - Session 2, A6: metabolic timeline moved below the charts row
+
+Mission A (mockup fidelity, dashboard-mockup-v1.png). The approved mockup order is metric cards → glucose chart + investigate → **timeline** → score/weight/insights → suggestions → seasonal + agni → footer; the implementation had the timeline dead-last, after Seasonal and Agni.
+
+- Fix: move the MetabolicTimeline block in app/dashboard/page.tsx to directly below the charts row. Pure JSX move; zero component or data changes.
+- Gates: 616 passed + 3 skipped · tsc ×3 silent · lint = the 3 known `<img>` warnings · build "Compiled successfully".
+
+---
+
+## 2026-10-29 - Session 2, A2: MeasuredDot key-spread console fix
+
+Mission A (dashboard visual fidelity). The only console error on /dashboard (all widths, local + prod) was React's "props object containing a `key` prop is being spread into JSX" from GlucoseTodayChart's dot renderer: recharts passes `key` inside the dot props, and the callback spread `{...p}` into `<MeasuredDot>`.
+
+- Fix: pass `cx`/`cy`/`payload`/`focusT` explicitly instead of the spread (GlucoseTodayChart.tsx:182). Zero behavior change; the focus-reading amber ring and dot sizes are untouched.
+- Gates: 616 passed + 3 skipped (51 files) · tsc ×3 silent · lint = the 3 known `<img>` warnings · build "Compiled successfully" (6 documented pre-existing prisma:no-such-table lines on the empty build DB).
+
+---
+
 ## 2026-10-28 - Dashboard revamp v1 shipped (items 1-7, approved redesign)
 
 The approved dashboard redesign v1, implemented commit-by-commit with all gates green per commit. Zero migration (0006 stays reserved); no package.json changes; engine + food-db gained pure modules only.

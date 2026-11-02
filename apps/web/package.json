@@ -24,11 +24,13 @@
     "@prisma/adapter-libsql": "^5.22.0",
     "@prisma/client": "^5.22.0",
     "bcryptjs": "^2.4.3",
+    "lucide-react": "^0.525.0",
     "next": "^15.1.0",
     "next-auth": "^4.24.10",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "recharts": "^2.13.3"
+    "recharts": "^2.13.3",
+    "zustand": "^5.0.16"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

@@ -1,0 +1,454 @@
+From 1be0cc2d968eba51fdee7a3138309e02c92b63f1 Mon Sep 17 00:00:00 2001
+From: Z User <z@container>
+Date: Wed, 28 Oct 2026 16:48:50 +0000
+Subject: [PATCH 09/16] feat(web): Know Your Body results page - no-dominance
+ label, interactive doshas, tradition sections (S2-B)
+
+Results lead with the engine profileLabel (ties name every sharer,
+'implies no dominance'), shares framed as share-of-12-answers with the
+not-biology guard, interactive per-dosha traditional panels, 'What this
+tradition suggests' + 'Explore your preferences' (existing modules
+only) + 'How this is calculated' explainer. New: PrakritiResult.tsx,
+lib/ayurveda-content.ts. No dosha ever explains a medical measurement.
+Gates all green.
+---
+ WORKLOG.md                                 |  15 ++
+ apps/web/src/components/PrakritiQuiz.tsx   |  75 ++------
+ apps/web/src/components/PrakritiResult.tsx | 199 +++++++++++++++++++++
+ apps/web/src/lib/ayurveda-content.ts       |  72 ++++++++
+ 4 files changed, 298 insertions(+), 63 deletions(-)
+ create mode 100644 apps/web/src/components/PrakritiResult.tsx
+ create mode 100644 apps/web/src/lib/ayurveda-content.ts
+
+diff --git a/WORKLOG.md b/WORKLOG.md
+index b6e2042..a2c8466 100644
+--- a/WORKLOG.md
++++ b/WORKLOG.md
+@@ -2,6 +2,21 @@
+ 
+ ---
+ 
++## 2026-10-29 - Session 2, B-results: Know Your Body results page rebuilt (B0-1/2/4/5/6/7/9 + safety copy)
++
++Mission B step 3. The old result view ("Your profile: Vata primary · Pitta secondary" + 3 static bars) is replaced by a full results page. New components: PrakritiResult.tsx (client) + lib/ayurveda-content.ts (static, clearly-labelled traditional copy).
++
++- B0-1/B0-5: results lead with the engine's profileLabel ("Vata–Pitta profile" on ties) + "Based on the current questionnaire (v1) · last taken …"; ties get an explicit "implies no dominance" note. Legacy primary/secondary is only a fallback for pre-B1 data.
++- B0-2: shares are framed "share of your 12 answers" with the guard "Shares describe your answers, not your body's biology — this is not a 'how much of you is Vata' percentage. Self-reported answers — not medical measurements."
++- B0-4: the three doshas render as interactive rows (count X/12, share %, bar); tapping expands a per-dosha "What the tradition associates with …" panel (balanced/imbalance qualities), each stamped "Traditional account — not a medical description of you."
++- B0-6: "What this tradition suggests" — gentle per-dosha reflection points for the top-count dosha(s), badged "traditional interpretation", footer: medical and nutrition needs always come first; herbal or significant dietary changes belong with a healthcare professional.
++- B0-7: "Explore your preferences" links to existing modules ONLY (healing-foods, recipes, log activity & sleep, dashboard seasonal+agni) — no new stores, no duplicate records.
++- B0-9: "How this is calculated" collapsible explainer (12 questions, one tag per answer, share-of-answers math summing to 100, ties labelled as ties, not clinically validated, not a diagnosis, retakes kept).
++- Safety: no string anywhere describes a dosha as explaining/causing/aggravating a medical measurement; attribution vocabulary untouched (this page makes no medical claims). Internal links use next/link (lint clean).
++- Gates: 619 passed + 3 skipped · tsc ×3 silent · lint = the 3 known `<img>` warnings · build "Compiled successfully".
++
++---
++
+ ## 2026-10-29 - Session 2, B-API: quizVersion + history in GET, B1 fields in every payload
+ 
+ Mission B step 2. The prakriti API now speaks the B1 engine's language; zero schema change (history rows + index already existed).
+diff --git a/apps/web/src/components/PrakritiQuiz.tsx b/apps/web/src/components/PrakritiQuiz.tsx
+index 218b0c6..386817e 100644
+--- a/apps/web/src/components/PrakritiQuiz.tsx
++++ b/apps/web/src/components/PrakritiQuiz.tsx
+@@ -1,6 +1,7 @@
+ 'use client';
+ 
+ import { useCallback, useEffect, useState } from 'react';
++import PrakritiResult, { type ProfileView } from './PrakritiResult';
+ 
+ interface QuizQuestion {
+   id: string;
+@@ -9,30 +10,15 @@ interface QuizQuestion {
+   options: { tag: string; label: string }[];
+ }
+ 
+-interface ProfileView {
+-  answers: Record<string, string>;
+-  vata: number;
+-  pitta: number;
+-  kapha: number;
+-  vataPct?: number;
+-  pittaPct?: number;
+-  kaphaPct?: number;
+-  primary: string;
+-  secondary: string;
+-  takenAt: string;
+-}
+-
+-const DOSHA_LABEL: Record<string, string> = { vata: 'Vata', pitta: 'Pitta', kapha: 'Kapha' };
+-const DOSHA_BAR: Record<string, string> = {
+-  vata: 'bg-sky-500',
+-  pitta: 'bg-amber-500',
+-  kapha: 'bg-emerald-500',
+-};
++// S2-B: ProfileView moved to PrakritiResult (gains profileLabel/isTie).
++// The quiz keeps quizVersion around so the result can say "based on the
++// current questionnaire (v1)".
+ 
+ export default function PrakritiQuiz() {
+   const [state, setState] = useState<'loading' | 'quiz' | 'result' | 'error'>('loading');
+   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
+   const [profile, setProfile] = useState<ProfileView | null>(null);
++  const [quizVersion, setQuizVersion] = useState<number | null>(null);
+   const [answers, setAnswers] = useState<Record<string, string>>({});
+   const [submitting, setSubmitting] = useState(false);
+   const [error, setError] = useState('');
+@@ -45,6 +31,7 @@ export default function PrakritiQuiz() {
+       const data = await res.json();
+       setQuestions(data.questions ?? []);
+       setProfile(data.profile ?? null);
++      setQuizVersion(typeof data.quizVersion === 'number' ? data.quizVersion : null);
+       setAnswers(data.profile?.answers ?? {});
+       setState(data.profile ? 'result' : 'quiz');
+     } catch (e) {
+@@ -67,6 +54,7 @@ export default function PrakritiQuiz() {
+       const data = await res.json();
+       if (!res.ok) throw new Error(data?.error ?? 'Could not save your answers.');
+       setProfile(data.profile);
++      if (typeof data.quizVersion === 'number') setQuizVersion(data.quizVersion);
+       setState('result');
+     } catch (e) {
+       setError(e instanceof Error ? e.message : 'Something went wrong.');
+@@ -79,51 +67,12 @@ export default function PrakritiQuiz() {
+   if (state === 'error') return <p className="text-sm text-red-600 dark:text-red-400">{error}</p>;
+ 
+   if (state === 'result' && profile) {
+-    const rows = [
+-      { key: 'vata', count: profile.vata, pct: profile.vataPct },
+-      { key: 'pitta', count: profile.pitta, pct: profile.pittaPct },
+-      { key: 'kapha', count: profile.kapha, pct: profile.kaphaPct },
+-    ];
+     return (
+-      <div>
+-        <h2 className="text-sm font-semibold">
+-          Your profile: {DOSHA_LABEL[profile.primary] ?? profile.primary} primary · {DOSHA_LABEL[profile.secondary] ?? profile.secondary} secondary
+-        </h2>
+-        <p className="mt-1 text-xs text-neutral-500">
+-          Last taken {new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true }).format(new Date(profile.takenAt))}
+-        </p>
+-        <div className="mt-4 space-y-3">
+-          {rows.map((r) => (
+-            <div key={r.key} className="flex items-center gap-2">
+-              <span className="w-14 shrink-0 text-sm text-neutral-500">{DOSHA_LABEL[r.key]}</span>
+-              <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
+-                <div className={`h-full ${DOSHA_BAR[r.key]}`} style={{ width: `${r.pct ?? Math.round((r.count / 12) * 100)}%` }} />
+-              </div>
+-              <span className="w-20 text-right text-sm tabular-nums">
+-                {r.count}/12{r.pct !== undefined ? ` (${r.pct}%)` : ''}
+-              </span>
+-            </div>
+-          ))}
+-        </div>
+-        <p className="mt-3 text-xs text-neutral-500">
+-          In the Ayurvedic tradition everyone carries all three doshas - this is only a look at your current mix.
+-        </p>
+-        <div className="mt-4 flex gap-2">
+-          <button
+-            type="button"
+-            onClick={() => { setAnswers({}); setState('quiz'); }}
+-            className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
+-          >
+-            Retake the quiz
+-          </button>
+-          <a
+-            href="/dashboard"
+-            className="rounded-lg border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+-          >
+-            Back to dashboard
+-          </a>
+-        </div>
+-      </div>
++      <PrakritiResult
++        profile={profile}
++        quizVersion={quizVersion}
++        onRetake={() => { setAnswers({}); setState('quiz'); }}
++      />
+     );
+   }
+ 
+diff --git a/apps/web/src/components/PrakritiResult.tsx b/apps/web/src/components/PrakritiResult.tsx
+new file mode 100644
+index 0000000..4e1c2b4
+--- /dev/null
++++ b/apps/web/src/components/PrakritiResult.tsx
+@@ -0,0 +1,199 @@
++'use client';
++
++// S2-B (Ayurveda Phase 1) — Know Your Body results view.
++// Leads with the no-dominance profileLabel (B0-1/B0-5); shares are framed as
++// "share of your 12 answers" with an explicit not-biology guard (B0-2); the
++// three doshas are interactive with clearly-labelled traditional panels
++// (B0-4); a balanced "what this tradition suggests" section (B0-6); entry
++// points to existing modules only (B0-7); and a "how this is calculated"
++// explainer (B0-9). Every traditional claim is framed as tradition; nothing
++// here describes a dosha as explaining any medical measurement.
++
++import { useState } from 'react';
++import Link from 'next/link';
++import { DOSHA_INFO, TRADITION_REFLECTIONS, topDoshas, type DoshaKey } from '@/lib/ayurveda-content';
++
++export interface ProfileView {
++  answers: Record<string, string>;
++  vata: number;
++  pitta: number;
++  kapha: number;
++  vataPct?: number;
++  pittaPct?: number;
++  kaphaPct?: number;
++  profileLabel?: string;
++  isTie?: boolean;
++  primary: string;
++  secondary: string;
++  takenAt: string;
++}
++
++const DOSHA_BAR: Record<DoshaKey, string> = {
++  vata: 'bg-sky-500',
++  pitta: 'bg-amber-500',
++  kapha: 'bg-emerald-500',
++};
++
++function istTaken(takenAt: string): string {
++  return new Intl.DateTimeFormat('en-IN', {
++    timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true,
++  }).format(new Date(takenAt));
++}
++
++export default function PrakritiResult({
++  profile, quizVersion, onRetake,
++}: {
++  profile: ProfileView;
++  quizVersion: number | null;
++  onRetake: () => void;
++}) {
++  const [openDosha, setOpenDosha] = useState<DoshaKey | null>(null);
++
++  const counts: Record<DoshaKey, number> = { vata: profile.vata, pitta: profile.pitta, kapha: profile.kapha };
++  const rows: { key: DoshaKey; count: number; pct?: number }[] = [
++    { key: 'vata', count: profile.vata, pct: profile.vataPct },
++    { key: 'pitta', count: profile.pitta, pct: profile.pittaPct },
++    { key: 'kapha', count: profile.kapha, pct: profile.kaphaPct },
++  ];
++
++  // B0-1/B0-5: lead with the engine's profileLabel; fall back to legacy naming
++  // only for data that predates it.
++  const label =
++    profile.profileLabel ??
++    `${DOSHA_INFO[profile.primary as DoshaKey]?.name ?? profile.primary} primary · ${
++      DOSHA_INFO[profile.secondary as DoshaKey]?.name ?? profile.secondary
++    } secondary`;
++  const isTie = profile.isTie ?? false;
++  const reflectionDoshas = topDoshas(counts);
++
++  return (
++    <div>
++      {/* Profile label (B0-1 / B0-5) */}
++      <p className="text-xs font-semibold uppercase tracking-wider text-neutral-400">Your profile</p>
++      <h2 className="mt-1 text-xl font-semibold tracking-tight">{label}</h2>
++      <p className="mt-1 text-xs text-neutral-500">
++        Based on the current questionnaire{quizVersion ? ` (v${quizVersion})` : ''} · last taken {istTaken(profile.takenAt)}
++      </p>
++      {isTie && (
++        <p className="mt-2 rounded-lg bg-neutral-50 px-3 py-2 text-xs text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300">
++          Two or more doshas share your top count — this profile names all of them and implies no dominance.
++        </p>
++      )}
++
++      {/* Three doshas — share of your 12 answers (B0-2 / B0-4) */}
++      <h3 className="mt-6 text-sm font-semibold">Your three doshas — share of your 12 answers</h3>
++      <div className="mt-2 space-y-1">
++        {rows.map((r) => {
++          const info = DOSHA_INFO[r.key];
++          const open = openDosha === r.key;
++          return (
++            <div key={r.key} className="rounded-lg border border-neutral-200 dark:border-neutral-800">
++              <button
++                type="button"
++                aria-expanded={open}
++                onClick={() => setOpenDosha(open ? null : r.key)}
++                className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
++              >
++                <span className="w-14 shrink-0 text-sm text-neutral-600 dark:text-neutral-300">{info.name}</span>
++                <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
++                  <div
++                    className={`h-full ${DOSHA_BAR[r.key]}`}
++                    style={{ width: `${r.pct ?? Math.round((r.count / 12) * 100)}%` }}
++                  />
++                </div>
++                <span className="w-24 shrink-0 text-right text-sm tabular-nums text-neutral-600 dark:text-neutral-300">
++                  {r.count}/12{r.pct !== undefined ? ` · ${r.pct}%` : ''}
++                </span>
++                <span className="w-4 shrink-0 text-center text-xs text-neutral-400" aria-hidden>{open ? '−' : '+'}</span>
++              </button>
++              {open && (
++                <div className="border-t border-neutral-100 px-3 py-3 text-xs leading-relaxed dark:border-neutral-900">
++                  <p className="font-medium text-neutral-700 dark:text-neutral-200">What the tradition associates with {info.name}</p>
++                  <p className="mt-1 text-neutral-600 dark:text-neutral-400">{info.tradition}</p>
++                  <p className="mt-1.5 text-neutral-600 dark:text-neutral-400"><span className="font-medium">In balance:</span> {info.balanced}</p>
++                  <p className="mt-1 text-neutral-600 dark:text-neutral-400"><span className="font-medium">Out of balance:</span> {info.imbalance}</p>
++                  <p className="mt-2 text-[11px] text-neutral-400">Traditional account — not a medical description of you.</p>
++                </div>
++              )}
++            </div>
++          );
++        })}
++      </div>
++      <p className="mt-2 text-xs text-neutral-500">
++        Shares describe your answers, not your body&rsquo;s biology — this is not a &ldquo;how much of you is Vata&rdquo; percentage.
++        Self-reported answers — not medical measurements.
++      </p>
++
++      {/* What this tradition suggests (B0-6) */}
++      <h3 className="mt-6 text-sm font-semibold">What this tradition suggests</h3>
++      <span className="mt-1 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
++        traditional interpretation
++      </span>
++      <div className="mt-2 space-y-3">
++        {reflectionDoshas.map((d) => (
++          <div key={d}>
++            <p className="text-xs font-medium text-neutral-600 dark:text-neutral-300">For {DOSHA_INFO[d].name.toLowerCase()}-leaning answers</p>
++            <ul className="mt-1 list-disc space-y-1 pl-5 text-xs leading-relaxed text-neutral-600 dark:text-neutral-400">
++              {TRADITION_REFLECTIONS[d].map((s) => <li key={s}>{s}</li>)}
++            </ul>
++          </div>
++        ))}
++      </div>
++      <p className="mt-3 text-[11px] leading-relaxed text-neutral-500">
++        Traditional reflection points — not medical advice. Your medical and nutrition needs always come first,
++        and any herbal remedy or significant dietary change belongs in a conversation with your healthcare professional.
++      </p>
++
++      {/* Explore your preferences (B0-7) — existing modules only */}
++      <h3 className="mt-6 text-sm font-semibold">Explore your preferences</h3>
++      <div className="mt-2 grid gap-2 sm:grid-cols-2">
++        <Link href="/healing-foods" className="rounded-xl border border-neutral-200 p-3 text-xs hover:border-brand-300 dark:border-neutral-800">
++          <span className="font-medium">Food as Medicine</span>
++          <span className="mt-0.5 block text-neutral-500">Traditional lens alongside nutrition facts.</span>
++        </Link>
++        <Link href="/recipes" className="rounded-xl border border-neutral-200 p-3 text-xs hover:border-brand-300 dark:border-neutral-800">
++          <span className="font-medium">Recipes</span>
++          <span className="mt-0.5 block text-neutral-500">Diabetic-friendly Indian cooking.</span>
++        </Link>
++        <Link href="/log" className="rounded-xl border border-neutral-200 p-3 text-xs hover:border-brand-300 dark:border-neutral-800">
++          <span className="font-medium">Log activity &amp; sleep</span>
++          <span className="mt-0.5 block text-neutral-500">Build the habits the tradition refers to.</span>
++        </Link>
++        <Link href="/dashboard" className="rounded-xl border border-neutral-200 p-3 text-xs hover:border-brand-300 dark:border-neutral-800">
++          <span className="font-medium">Seasonal routine &amp; agni rhythm</span>
++          <span className="mt-0.5 block text-neutral-500">On your dashboard, bottom row.</span>
++        </Link>
++      </div>
++
++      {/* How this is calculated (B0-9) */}
++      <details className="mt-6 rounded-xl border border-neutral-200 dark:border-neutral-800">
++        <summary className="cursor-pointer px-3 py-2.5 text-sm font-medium">How this is calculated</summary>
++        <div className="border-t border-neutral-100 px-3 py-3 text-xs leading-relaxed text-neutral-600 dark:border-neutral-900 dark:text-neutral-400">
++          <ul className="list-disc space-y-1.5 pl-5">
++            <li>12 questions across body, skin &amp; hair, appetite &amp; digestion, sleep &amp; energy, mind, and weather &amp; stress.</li>
++            <li>Each answer maps to exactly one dosha category in the tradition&rsquo;s framework.</li>
++            <li>Counts are how many of your 12 answers matched each category; the percentage is that count&rsquo;s share of your 12 answers, rounded to whole numbers that always sum to 100.</li>
++            <li>When two or three doshas share your top count, your profile is labelled with all of them — no dominance is implied.</li>
++            <li>This questionnaire is not clinically validated, does not diagnose anything, and every retake is kept in your history.</li>
++          </ul>
++        </div>
++      </details>
++
++      <div className="mt-6 flex gap-2">
++        <button
++          type="button"
++          onClick={onRetake}
++          className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
++        >
++          Retake the quiz
++        </button>
++        <Link
++          href="/dashboard"
++          className="rounded-lg border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
++        >
++          Back to dashboard
++        </Link>
++      </div>
++    </div>
++  );
++}
+diff --git a/apps/web/src/lib/ayurveda-content.ts b/apps/web/src/lib/ayurveda-content.ts
+new file mode 100644
+index 0000000..2a2f117
+--- /dev/null
++++ b/apps/web/src/lib/ayurveda-content.ts
+@@ -0,0 +1,72 @@
++// S2-B (Ayurveda Phase 1) — static, clearly-labelled traditional-content copy
++// for the Know Your Body results page. Presentation data only (engine logic
++// lives in packages/engine/src/prakriti.ts).
++//
++// Safety rules baked into every string here:
++// - Traditional accounts are framed AS tradition ("the tradition links/associates…"),
++//   never as statements of medical fact about the user.
++// - Nothing describes a dosha as explaining, causing or aggravating any medical
++//   measurement (glucose, weight, labs). No dosha-glucose causality anywhere.
++// - No "your body is X% dosha" phrasing — shares describe ANSWERS, not biology.
++
++export type DoshaKey = 'vata' | 'pitta' | 'kapha';
++
++export interface DoshaInfo {
++  name: string;
++  /** What the Ayurvedic tradition associates with this dosha. */
++  tradition: string;
++  /** Qualities the tradition describes when in balance. */
++  balanced: string;
++  /** Qualities the tradition describes when out of balance. */
++  imbalance: string;
++}
++
++export const DOSHA_INFO: Record<DoshaKey, DoshaInfo> = {
++  vata: {
++    name: 'Vata',
++    tradition:
++      'The tradition links Vata with movement — light frames, quick and restless minds, and variable appetite, sleep and energy.',
++    balanced: 'Traditionally described as adaptable, imaginative and lively when in balance.',
++    imbalance: 'Traditional accounts describe imbalance as dryness, restlessness, and irregular digestion or sleep.',
++  },
++  pitta: {
++    name: 'Pitta',
++    tradition:
++      'The tradition links Pitta with transformation — medium muscular builds, strong digestion, and sharp, driven focus.',
++    balanced: 'Traditionally described as discerning, warm and courageous when in balance.',
++    imbalance: 'Traditional accounts describe imbalance as excess heat, irritation, acidity and impatience.',
++  },
++  kapha: {
++    name: 'Kapha',
++    tradition:
++      'The tradition links Kapha with structure and stability — solid frames, steady energy, calm endurance and deep sleep.',
++    balanced: 'Traditionally described as grounded, patient and loyal when in balance.',
++    imbalance: 'Traditional accounts describe imbalance as heaviness, sluggishness and resistance to change.',
++  },
++};
++
++/** Gentle reflection points per dosha — traditional framing only, never medical,
++ *  never tied to any medical measurement. */
++export const TRADITION_REFLECTIONS: Record<DoshaKey, string[]> = {
++  vata: [
++    'The tradition favours warm, freshly cooked meals and steady meal times for vata-leaning constitutions.',
++    'Traditional practice recommends regular routines and gentle, grounding activity over bursts of intense effort.',
++  ],
++  pitta: [
++    'The tradition suggests cooling, mildly spiced food and moderate — rather than competitive — exercise for pitta-leaning constitutions.',
++    'Traditional practice recommends pacing work with real rest, and stepping back from heat, literal and emotional.',
++  ],
++  kapha: [
++    'The tradition encourages lighter cooking, warming spices and brisk movement to bring energy for kapha-leaning constitutions.',
++    'Traditional practice recommends earlier, lighter dinners and building variety into the daily routine.',
++  ],
++};
++
++/** The three tied-in doshas for a result, derived from counts — mirrors the
++ *  engine's tie rule (top count shared by 2+). Used to pick which reflection
++ *  lists the results page shows. */
++export function topDoshas(counts: Record<DoshaKey, number>): DoshaKey[] {
++  const top = Math.max(counts.vata, counts.pitta, counts.kapha);
++  const order: DoshaKey[] = ['vata', 'pitta', 'kapha'];
++  return order.filter((d) => counts[d] === top);
++}
+-- 
+2.47.3
+

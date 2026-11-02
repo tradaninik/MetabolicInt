@@ -1,0 +1,547 @@
+From 5e1bfc932bd03eba7b89769e9c34babc0ad313ee Mon Sep 17 00:00:00 2001
+From: Z User <z@container>
+Date: Wed, 28 Oct 2026 16:55:11 +0000
+Subject: [PATCH 11/16] feat(web): prakriti daily wellness card + Ayurveda
+ off-switch (S2-B3/B5)
+
+'What this means for your day': Food/Movement/Relaxation/Sleep/
+Reflection ideas keyed to the user's own quiz answers only (ties
+alternate categories between tied doshas); per-idea variant cycler +
+IST-day dismissals, device-local (Add-to-plan pattern). Settings gains
+an 'Ayurveda personalisation' switch - OFF hides tradition panels,
+suggestions and the wellness card; the user's own assessment + history
+always stay; zero medical feature loss. Selection never reads medical
+data. Zero schema change. Gates all green.
+---
+ WORKLOG.md                                    |  12 ++
+ apps/web/src/app/settings/page.tsx            |  35 ++++++
+ apps/web/src/components/PrakritiResult.tsx    |  76 +++++++----
+ .../src/components/PrakritiWellnessCard.tsx   | 118 ++++++++++++++++++
+ apps/web/src/lib/ayurveda-content.ts          |  94 ++++++++++++++
+ apps/web/src/lib/ayurveda-prefs.ts            |  87 +++++++++++++
+ 6 files changed, 398 insertions(+), 24 deletions(-)
+ create mode 100644 apps/web/src/components/PrakritiWellnessCard.tsx
+ create mode 100644 apps/web/src/lib/ayurveda-prefs.ts
+
+diff --git a/WORKLOG.md b/WORKLOG.md
+index 3aa6d42..0ef650d 100644
+--- a/WORKLOG.md
++++ b/WORKLOG.md
+@@ -2,6 +2,18 @@
+ 
+ ---
+ 
++## 2026-10-29 - Session 2, B-wellness: "What this means for your day" + Ayurveda off-switch (B0-10/11/12)
++
++Mission B step 5, with the two open decisions resolved per the documented defaults (both flagged to the owner): wellness card lives on the PRAKITI RESULTS PAGE (the mockup dashboard shows no dosha-specific card - its three suggestions are pattern/medical), and storage is DEVICE-LOCAL (B4: zero new tables, zero Turso migration).
++
++- New lib/ayurveda-prefs.ts: `mi.ayurveda.personalisation` localStorage preference (default ON, degrades ON on storage failure), mounted-safe useAyurvedaEnabled hook, IST-day helpers, and the wellness dismiss/variant keys - the Add-to-plan device-local pattern, extended.
++- New PrakritiWellnessCard (results page, inside "What this tradition suggests"): five categories - Food / Movement / Relaxation / Sleep / Reflection. Ideas are keyed to the user's own quiz answers ONLY (on a tie the categories alternate between the tied doshas - balanced, no winner implied); two variants per category with a "Different idea" cycler (variant persists as the user's preference) and a "Not today" dismissal (resets with the IST day, Add-to-plan pattern). Links only into existing modules (recipes / activity+sleep logging). NEVER a response to any medical reading - the selection deliberately does not read glucose/sleep/steps data (Layer separation: traditional content reacts to stated preferences only).
++- Off-switch (Settings -> "Ayurveda personalisation", role=switch): OFF hides the per-dosha tradition panels, "What this tradition suggests", and the wellness card - replaced by a one-line note linking back to Settings. The user's own assessment (label, scores, history) ALWAYS stays visible. Zero loss of any medical feature (nothing on this page is medical). Device-local; if cross-device sync is ever wanted that is a written UserSettings.prefsJson turso-migrate proposal first.
++- Safety copy stays hard: every idea is a neutral action or explicitly "the tradition favours/suggests"; nothing claims a medical benefit or mentions any measurement.
++- Gates: 619 passed + 3 skipped · tsc ×3 silent · lint = the 3 known `<img>` warnings · build "Compiled successfully".
++
++---
++
+ ## 2026-10-29 - Session 2, B-history: retake history + deltas on the results page (B0-8)
+ 
+ Mission B step 4. Rows already existed and are indexed — this is UI only, zero schema/API change (GET has returned history[] since the B-API commit).
+diff --git a/apps/web/src/app/settings/page.tsx b/apps/web/src/app/settings/page.tsx
+index c7c7fea..db9a30a 100644
+--- a/apps/web/src/app/settings/page.tsx
++++ b/apps/web/src/app/settings/page.tsx
+@@ -2,6 +2,7 @@
+ 
+ import { useEffect, useState } from 'react';
+ import AppShell from '@/components/AppShell';
++import { useAyurvedaEnabled } from '@/lib/ayurveda-prefs';
+ 
+ interface TargetPair {
+   low: number;
+@@ -48,6 +49,8 @@ export default function SettingsPage() {
+   const [saving, setSaving] = useState(false);
+   const [error, setError] = useState<string | null>(null);
+   const [msg, setMsg] = useState<string | null>(null);
++  // S2-B5 off-switch — device-local preference (no schema change).
++  const [ayurvedaOn, setAyurvedaOn] = useAyurvedaEnabled();
+ 
+   useEffect(() => {
+     fetch('/api/settings')
+@@ -185,6 +188,38 @@ export default function SettingsPage() {
+           </button>
+           {msg && <p className="mt-3 text-sm text-brand-600 dark:text-brand-400">{msg}</p>}
+         </div>
++
++        {/* S2-B5: Ayurveda personalisation off-switch (device-local). Off hides
++            the traditional suggestion surfaces with ZERO loss of medical
++            features; the user's own assessment + history always stay visible. */}
++        <div className="mt-4 rounded-2xl border border-neutral-200 p-5 dark:border-neutral-800">
++          <h2 className="text-lg font-semibold">Ayurveda personalisation</h2>
++          <p className="mt-1 text-sm text-neutral-500">
++            Show traditional (Ayurvedic) wellbeing content — the Know Your Body tradition sections and
++            daily ideas. Turning this off hides them; every medical feature stays exactly as it is.
++          </p>
++          <div className="mt-3 flex items-center gap-3">
++            <button
++              type="button"
++              role="switch"
++              aria-checked={ayurvedaOn}
++              aria-label="Ayurveda personalisation"
++              onClick={() => setAyurvedaOn(!ayurvedaOn)}
++              className={`relative h-6 w-11 shrink-0 rounded-full transition ${ayurvedaOn ? 'bg-brand-600' : 'bg-neutral-300 dark:bg-neutral-700'}`}
++            >
++              <span
++                className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${ayurvedaOn ? 'left-[22px]' : 'left-0.5'}`}
++              />
++            </button>
++            <span className="text-sm">
++              {ayurvedaOn ? 'On — tradition sections and daily ideas visible' : 'Off — traditional suggestions hidden'}
++            </span>
++          </div>
++          <p className="mt-2 text-xs text-neutral-400">
++            This preference lives on this device only (like your daily plan ticks). Your Know Your Body
++            answers and assessment history always remain visible under Know Your Body.
++          </p>
++        </div>
+       </div>
+     </AppShell>
+   );
+diff --git a/apps/web/src/components/PrakritiResult.tsx b/apps/web/src/components/PrakritiResult.tsx
+index e698c77..7df4f17 100644
+--- a/apps/web/src/components/PrakritiResult.tsx
++++ b/apps/web/src/components/PrakritiResult.tsx
+@@ -12,6 +12,8 @@
+ import { useState } from 'react';
+ import Link from 'next/link';
+ import { DOSHA_INFO, TRADITION_REFLECTIONS, topDoshas, type DoshaKey } from '@/lib/ayurveda-content';
++import { useAyurvedaEnabled } from '@/lib/ayurveda-prefs';
++import PrakritiWellnessCard from './PrakritiWellnessCard';
+ import type { HistoryItem } from './PrakritiQuiz';
+ 
+ export interface ProfileView {
+@@ -50,6 +52,10 @@ export default function PrakritiResult({
+   onRetake: () => void;
+ }) {
+   const [openDosha, setOpenDosha] = useState<DoshaKey | null>(null);
++  // S2-B5 off-switch: hides the traditional-suggestion surfaces; the user's
++  // own assessment (scores, label, history) always stays visible. Zero loss
++  // of any medical feature — none of this page is medical.
++  const [ayurvedaOn] = useAyurvedaEnabled();
+ 
+   const counts: Record<DoshaKey, number> = { vata: profile.vata, pitta: profile.pitta, kapha: profile.kapha };
+   const rows: { key: DoshaKey; count: number; pct?: number }[] = [
+@@ -88,27 +94,36 @@ export default function PrakritiResult({
+         {rows.map((r) => {
+           const info = DOSHA_INFO[r.key];
+           const open = openDosha === r.key;
++          const rowBody = (
++            <>
++              <span className="w-14 shrink-0 text-sm text-neutral-600 dark:text-neutral-300">{info.name}</span>
++              <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
++                <div
++                  className={`h-full ${DOSHA_BAR[r.key]}`}
++                  style={{ width: `${r.pct ?? Math.round((r.count / 12) * 100)}%` }}
++                />
++              </div>
++              <span className="w-24 shrink-0 text-right text-sm tabular-nums text-neutral-600 dark:text-neutral-300">
++                {r.count}/12{r.pct !== undefined ? ` · ${r.pct}%` : ''}
++              </span>
++            </>
++          );
+           return (
+             <div key={r.key} className="rounded-lg border border-neutral-200 dark:border-neutral-800">
+-              <button
+-                type="button"
+-                aria-expanded={open}
+-                onClick={() => setOpenDosha(open ? null : r.key)}
+-                className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
+-              >
+-                <span className="w-14 shrink-0 text-sm text-neutral-600 dark:text-neutral-300">{info.name}</span>
+-                <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
+-                  <div
+-                    className={`h-full ${DOSHA_BAR[r.key]}`}
+-                    style={{ width: `${r.pct ?? Math.round((r.count / 12) * 100)}%` }}
+-                  />
+-                </div>
+-                <span className="w-24 shrink-0 text-right text-sm tabular-nums text-neutral-600 dark:text-neutral-300">
+-                  {r.count}/12{r.pct !== undefined ? ` · ${r.pct}%` : ''}
+-                </span>
+-                <span className="w-4 shrink-0 text-center text-xs text-neutral-400" aria-hidden>{open ? '−' : '+'}</span>
+-              </button>
+-              {open && (
++              {ayurvedaOn ? (
++                <button
++                  type="button"
++                  aria-expanded={open}
++                  onClick={() => setOpenDosha(open ? null : r.key)}
++                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
++                >
++                  {rowBody}
++                  <span className="w-4 shrink-0 text-center text-xs text-neutral-400" aria-hidden>{open ? '−' : '+'}</span>
++                </button>
++              ) : (
++                <div className="flex w-full items-center gap-2 px-3 py-2.5">{rowBody}</div>
++              )}
++              {ayurvedaOn && open && (
+                 <div className="border-t border-neutral-100 px-3 py-3 text-xs leading-relaxed dark:border-neutral-900">
+                   <p className="font-medium text-neutral-700 dark:text-neutral-200">What the tradition associates with {info.name}</p>
+                   <p className="mt-1 text-neutral-600 dark:text-neutral-400">{info.tradition}</p>
+@@ -169,8 +184,11 @@ export default function PrakritiResult({
+         </ul>
+       )}
+ 
+-      {/* What this tradition suggests (B0-6) */}
+-      <h3 className="mt-6 text-sm font-semibold">What this tradition suggests</h3>
++      {/* What this tradition suggests (B0-6) — hidden when Ayurvedic
++          personalisation is off (Settings); the note below explains. */}
++      {ayurvedaOn ? (
++        <>
++          <h3 className="mt-6 text-sm font-semibold">What this tradition suggests</h3>
+       <span className="mt-1 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+         traditional interpretation
+       </span>
+@@ -185,9 +203,19 @@ export default function PrakritiResult({
+         ))}
+       </div>
+       <p className="mt-3 text-[11px] leading-relaxed text-neutral-500">
+-        Traditional reflection points — not medical advice. Your medical and nutrition needs always come first,
+-        and any herbal remedy or significant dietary change belongs in a conversation with your healthcare professional.
+-      </p>
++            Traditional reflection points — not medical advice. Your medical and nutrition needs always come first,
++            and any herbal remedy or significant dietary change belongs in a conversation with your healthcare professional.
++          </p>
++
++          {/* What this means for your day (B0-10) */}
++          <PrakritiWellnessCard top={reflectionDoshas} />
++        </>
++      ) : (
++        <p className="mt-6 rounded-lg border border-neutral-200 px-3 py-2.5 text-xs text-neutral-500 dark:border-neutral-800">
++          Ayurvedic personalisation is off — your assessment and history stay; traditional suggestions are hidden.
++          Turn it back on in <Link href="/settings" className="text-brand-600 hover:underline dark:text-brand-400">Settings</Link>.
++        </p>
++      )}
+ 
+       {/* Explore your preferences (B0-7) — existing modules only */}
+       <h3 className="mt-6 text-sm font-semibold">Explore your preferences</h3>
+diff --git a/apps/web/src/components/PrakritiWellnessCard.tsx b/apps/web/src/components/PrakritiWellnessCard.tsx
+new file mode 100644
+index 0000000..3d234c2
+--- /dev/null
++++ b/apps/web/src/components/PrakritiWellnessCard.tsx
+@@ -0,0 +1,118 @@
++'use client';
++
++// S2-B3 — "What this means for your day": optional daily wellbeing ideas
++// across Food / Movement / Relaxation / Sleep / Reflection. Selection is keyed
++// to the user's own quiz answers (stated preferences) ONLY — never to any
++// medical measurement. Dismissals reset with the IST day (Add-to-plan
++// pattern); the chosen variant per category persists as the user's
++// preference. All state is device-local (B4: zero new stores).
++
++import { useEffect, useState } from 'react';
++import Link from 'next/link';
++import {
++  WELLNESS_CATEGORIES, WELLNESS_CATEGORY_LABEL, WELLNESS_IDEAS, WELLNESS_LINK,
++  type DoshaKey, type WellnessCategory,
++} from '@/lib/ayurveda-content';
++import {
++  istDateKey, lsGetNumber, lsHas, lsSet, wellnessDismissKey, wellnessVariantKey,
++} from '@/lib/ayurveda-prefs';
++
++export default function PrakritiWellnessCard({ top }: { top: DoshaKey[] }) {
++  const day = istDateKey();
++  const [mounted, setMounted] = useState(false);
++  const [variants, setVariants] = useState<Record<string, number>>({});
++  const [dismissed, setDismissed] = useState<Record<string, boolean>>({});
++
++  useEffect(() => {
++    const v: Record<string, number> = {};
++    const d: Record<string, boolean> = {};
++    for (const cat of WELLNESS_CATEGORIES) {
++      v[cat] = lsGetNumber(wellnessVariantKey(cat), 0);
++      d[cat] = lsHas(wellnessDismissKey(cat, day));
++    }
++    setVariants(v);
++    setDismissed(d);
++    setMounted(true);
++  }, [day]);
++
++  /** On a tie the categories alternate between the tied doshas — balanced,
++   *  deterministic, and no dosha is presented as the winner. */
++  const doshaFor = (i: number): DoshaKey => top[i % Math.max(top.length, 1)] ?? 'vata';
++
++  const cycle = (cat: WellnessCategory) => {
++    const next = (variants[cat] ?? 0) + 1;
++    setVariants((prev) => ({ ...prev, [cat]: next }));
++    lsSet(wellnessVariantKey(cat), String(next));
++  };
++
++  const dismiss = (cat: WellnessCategory) => {
++    lsSet(wellnessDismissKey(cat, day), '1');
++    setDismissed((prev) => ({ ...prev, [cat]: true }));
++  };
++
++  if (!mounted) return null; // avoid hydration mismatch on stored state
++
++  const visible = WELLNESS_CATEGORIES.filter((c) => !dismissed[c]);
++
++  return (
++    <div className="mt-6">
++      <h3 className="text-sm font-semibold">What this means for your day</h3>
++      <p className="mt-1 text-xs text-neutral-500">
++        Ideas that fit the preferences you expressed in this self-assessment — not anything medical.
++        They reset each day and you can set any of them aside.
++      </p>
++      {visible.length === 0 ? (
++        <p className="mt-3 rounded-lg border border-neutral-200 px-3 py-2.5 text-xs text-neutral-500 dark:border-neutral-800">
++          You have set today&rsquo;s ideas aside — they will be back tomorrow.
++        </p>
++      ) : (
++        <ul className="mt-2 space-y-1.5">
++          {WELLNESS_CATEGORIES.map((cat, i) => {
++            if (dismissed[cat]) return null;
++            const dosha = doshaFor(i);
++            const ideas = WELLNESS_IDEAS[dosha][cat];
++            const idea = ideas[(variants[cat] ?? 0) % ideas.length];
++            const link = WELLNESS_LINK[cat];
++            return (
++              <li
++                key={cat}
++                className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-lg border border-neutral-200 px-3 py-2.5 text-xs dark:border-neutral-800"
++              >
++                <span className="shrink-0 rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300">
++                  {WELLNESS_CATEGORY_LABEL[cat]}
++                </span>
++                <span className="min-w-0 flex-1 text-neutral-700 dark:text-neutral-300">{idea}</span>
++                <span className="flex shrink-0 items-center gap-3">
++                  {link && (
++                    <Link href={link.href} className="font-medium text-brand-600 hover:underline dark:text-brand-400">
++                      {link.label} →
++                    </Link>
++                  )}
++                  <button
++                    type="button"
++                    onClick={() => cycle(cat)}
++                    className="text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200"
++                  >
++                    Different idea
++                  </button>
++                  <button
++                    type="button"
++                    onClick={() => dismiss(cat)}
++                    className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
++                    aria-label={`Dismiss today's ${WELLNESS_CATEGORY_LABEL[cat].toLowerCase()} idea`}
++                  >
++                    Not today
++                  </button>
++                </span>
++              </li>
++            );
++          })}
++        </ul>
++      )}
++      <p className="mt-2 text-[11px] leading-relaxed text-neutral-500">
++        Traditional wellbeing ideas for reflection — not medical advice, and never a response to any
++        reading. Your medical and nutrition needs always come first.
++      </p>
++    </div>
++  );
++}
+diff --git a/apps/web/src/lib/ayurveda-content.ts b/apps/web/src/lib/ayurveda-content.ts
+index 2a2f117..fc2e796 100644
+--- a/apps/web/src/lib/ayurveda-content.ts
++++ b/apps/web/src/lib/ayurveda-content.ts
+@@ -70,3 +70,97 @@ export function topDoshas(counts: Record<DoshaKey, number>): DoshaKey[] {
+   const order: DoshaKey[] = ['vata', 'pitta', 'kapha'];
+   return order.filter((d) => counts[d] === top);
+ }
++
++// --- S2-B3: "What this means for your day" wellness ideas -------------------
++// Gentle, traditional, non-medical. Every string is either a neutral action
++// or explicitly framed as "the tradition favours/suggests/links…". Nothing
++// claims a medical benefit, mentions any medical measurement, or says a dosha
++// explains any reading. Selection is keyed to the user's own quiz answers
++// (stated preferences) only.
++
++export const WELLNESS_CATEGORIES = ['food', 'movement', 'relaxation', 'sleep', 'reflection'] as const;
++export type WellnessCategory = (typeof WELLNESS_CATEGORIES)[number];
++
++export const WELLNESS_CATEGORY_LABEL: Record<WellnessCategory, string> = {
++  food: 'Food',
++  movement: 'Movement',
++  relaxation: 'Relaxation',
++  sleep: 'Sleep',
++  reflection: 'Reflection',
++};
++
++/** Links into existing modules only, and only where one maps naturally. */
++export const WELLNESS_LINK: Partial<Record<WellnessCategory, { href: string; label: string }>> = {
++  food: { href: '/recipes', label: 'Recipes' },
++  movement: { href: '/log', label: 'Log activity' },
++  sleep: { href: '/log', label: 'Log sleep' },
++};
++
++export const WELLNESS_IDEAS: Record<DoshaKey, Record<WellnessCategory, string[]>> = {
++  vata: {
++    food: [
++      'Warm, freshly cooked food at steady times — the tradition favours regularity for vata-leaning answers.',
++      'A warm drink with meals instead of cold, dry snacks — the traditional choice for vata-leaning answers.',
++    ],
++    movement: [
++      'A gentle 15-minute walk after your largest meal.',
++      'Easy, rhythmic movement — the tradition prefers it to bursts of intense effort for vata-leaning answers.',
++    ],
++    relaxation: [
++      'Five minutes of slow, even breathing before your evening meal.',
++      'A few quiet minutes without screens before bed — the tradition links stillness with settled vata.',
++    ],
++    sleep: [
++      'A fixed wind-down time tonight — regularity is the tradition’s theme for vata-leaning answers.',
++      'Warm feet, warm drink, early lights-out — the traditional wind-down for vata-leaning answers.',
++    ],
++    reflection: [
++      'Note one moment today when you felt scattered — just notice, no judging.',
++      'Jot down tomorrow’s one most-important thing; the tradition links settled plans with settled vata.',
++    ],
++  },
++  pitta: {
++    food: [
++      'Cooling, mildly spiced food — the tradition suggests going easy on chilli and fried heat for pitta-leaning answers.',
++      'Eat without working at the same time — the tradition ties undistracted meals to balanced pitta.',
++    ],
++    movement: [
++      'A moderate walk in the cooler part of the day.',
++      'Exercise at an effort you could still chat at — the tradition prefers moderation over competition for pitta-leaning answers.',
++    ],
++    relaxation: [
++      'Ten minutes of something deliberately slow after your busiest stretch.',
++      'Step away from the heat — literal or emotional — for a few quiet minutes.',
++    ],
++    sleep: [
++      'Lights out before the second wind — the tradition links late nights with heated pitta.',
++      'A cool, dark, quiet room tonight — the traditional setup for pitta-leaning answers.',
++    ],
++    reflection: [
++      'Notice one irritation today without acting on it — just watch it pass.',
++      'End the day noting one thing that went right; the tradition favours contentment over conquest for pitta.',
++    ],
++  },
++  kapha: {
++    food: [
++      'Lighter cooking with warming spices — the tradition favours these for kapha-leaning answers.',
++      'An earlier, lighter dinner tonight; the tradition suggests giving the evening a long gap.',
++    ],
++    movement: [
++      'A brisk 20-minute walk, ideally before your first meal.',
++      'A few minutes of movement that makes you breathe harder — the tradition favours invigorating effort for kapha-leaning answers.',
++    ],
++    relaxation: [
++      'Rest after effort, not instead of it — the tradition ties balanced kapha to earned rest.',
++      'A few energising breaths instead of a nap this afternoon.',
++    ],
++    sleep: [
++      'Up and into daylight early — the tradition favours early rising for kapha-leaning answers.',
++      'Keep tonight’s sleep to a steady window; long lie-ins traditionally weigh kapha down.',
++    ],
++    reflection: [
++      'Note one small thing you finished today — momentum is the tradition’s kapha theme.',
++      'Choose tomorrow’s first move tonight, and start with it before anything slow.',
++    ],
++  },
++};
+diff --git a/apps/web/src/lib/ayurveda-prefs.ts b/apps/web/src/lib/ayurveda-prefs.ts
+new file mode 100644
+index 0000000..94df95c
+--- /dev/null
++++ b/apps/web/src/lib/ayurveda-prefs.ts
+@@ -0,0 +1,87 @@
++// S2-B3/B4 — Ayurveda personalisation preference + wellness-card state.
++// Device-local ONLY (B4 rule: zero new tables, zero Turso migration this
++// session; mirrors the Add-to-plan localStorage pattern). If cross-device
++// sync is ever wanted, that becomes a written UserSettings.prefsJson
++// turso-migrate proposal FIRST.
++//
++// Reading medical data (glucose, sleep logs) to select Ayurvedic content is
++// deliberately NOT done anywhere in this module — traditional content reacts
++// to the user's stated preferences only, never to medical measurements.
++
++import { useEffect, useState } from 'react';
++
++const PREF_KEY = 'mi.ayurveda.personalisation';
++
++/** Default ON; any localStorage failure (private mode etc.) degrades to ON. */
++export function isAyurvedaEnabled(): boolean {
++  try {
++    return window.localStorage.getItem(PREF_KEY) !== 'off';
++  } catch {
++    return true;
++  }
++}
++
++export function setAyurvedaEnabled(v: boolean): void {
++  try {
++    window.localStorage.setItem(PREF_KEY, v ? 'on' : 'off');
++  } catch {
++    /* ignore — device may block storage */
++  }
++}
++
++/** Mounted-safe hook for client components. */
++export function useAyurvedaEnabled(): [boolean, (v: boolean) => void] {
++  const [enabled, setEnabledState] = useState(true);
++  useEffect(() => {
++    setEnabledState(isAyurvedaEnabled());
++  }, []);
++  const set = (v: boolean) => {
++    setAyurvedaEnabled(v);
++    setEnabledState(v);
++  };
++  return [enabled, set];
++}
++
++/** IST 'YYYY-MM-DD' — the wellness dismissals reset with the IST day,
++ *  exactly like the dashboard's Add-to-plan pattern. */
++export function istDateKey(t: number = Date.now()): string {
++  return new Intl.DateTimeFormat('en-CA', {
++    timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit',
++  }).format(new Date(t));
++}
++
++// --- wellness-card state helpers (all best-effort; storage failures degrade) ---
++
++export function wellnessVariantKey(category: string): string {
++  return `mi.ayurveda.wellness.variant.${category}`;
++}
++
++export function wellnessDismissKey(category: string, day: string): string {
++  return `mi.ayurveda.wellness.off.${category}.${day}`;
++}
++
++export function lsGetNumber(key: string, fallback: number): number {
++  try {
++    const raw = window.localStorage.getItem(key);
++    const n = raw === null ? NaN : Number(raw);
++    return Number.isFinite(n) ? n : fallback;
++  } catch {
++    return fallback;
++  }
++}
++
++export function lsSet(key: string, value: string): void {
++  try {
++    window.localStorage.setItem(key, value);
++  } catch {
++    /* ignore */
++  }
++}
++
++export function lsHas(key: string): boolean {
++  try {
++    return window.localStorage.getItem(key) !== null;
++  } catch {
++    return false;
++  }
++}
+-- 
+2.47.3
+

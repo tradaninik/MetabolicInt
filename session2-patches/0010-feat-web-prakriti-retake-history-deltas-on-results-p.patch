@@ -1,0 +1,176 @@
+From 01db3b44a79242b81356b6041d845649bcf0fdbc Mon Sep 17 00:00:00 2001
+From: Z User <z@container>
+Date: Wed, 28 Oct 2026 16:50:25 +0000
+Subject: [PATCH 10/16] feat(web): prakriti retake history + deltas on results
+ page (S2-B)
+
+History list (newest first, latest tagged) with per-dosha deltas vs
+the previous attempt; single-attempt accounts get the honest empty
+line. After a retake the client re-GETs so profile+history share one
+source of truth. UI only - rows and index already existed. Gates all
+green.
+---
+ WORKLOG.md                                 | 10 +++++
+ apps/web/src/components/PrakritiQuiz.tsx   | 24 +++++++++--
+ apps/web/src/components/PrakritiResult.tsx | 47 +++++++++++++++++++++-
+ 3 files changed, 76 insertions(+), 5 deletions(-)
+
+diff --git a/WORKLOG.md b/WORKLOG.md
+index a2c8466..3aa6d42 100644
+--- a/WORKLOG.md
++++ b/WORKLOG.md
+@@ -2,6 +2,16 @@
+ 
+ ---
+ 
++## 2026-10-29 - Session 2, B-history: retake history + deltas on the results page (B0-8)
++
++Mission B step 4. Rows already existed and are indexed — this is UI only, zero schema/API change (GET has returned history[] since the B-API commit).
++
++- PrakritiQuiz captures `history` from the GET payload; after a successful retake it re-runs load() so the latest profile and history always come from the same GET (single source of truth; the POST response is no longer used for state).
++- PrakritiResult renders "Your assessment history": newest first, date + no-dominance label + V/P/K counts, the newest tagged "latest", and every older attempt shows "vs previous: V +n · P −n · K ±0" deltas against the attempt just newer than it. Single-attempt accounts get the honest "every retake is kept" line instead of an empty list.
++- Gates: 619 passed + 3 skipped · tsc ×3 silent · lint = the 3 known `<img>` warnings · build "Compiled successfully".
++
++---
++
+ ## 2026-10-29 - Session 2, B-results: Know Your Body results page rebuilt (B0-1/2/4/5/6/7/9 + safety copy)
+ 
+ Mission B step 3. The old result view ("Your profile: Vata primary · Pitta secondary" + 3 static bars) is replaced by a full results page. New components: PrakritiResult.tsx (client) + lib/ayurveda-content.ts (static, clearly-labelled traditional copy).
+diff --git a/apps/web/src/components/PrakritiQuiz.tsx b/apps/web/src/components/PrakritiQuiz.tsx
+index 386817e..caf987e 100644
+--- a/apps/web/src/components/PrakritiQuiz.tsx
++++ b/apps/web/src/components/PrakritiQuiz.tsx
+@@ -12,12 +12,26 @@ interface QuizQuestion {
+ 
+ // S2-B: ProfileView moved to PrakritiResult (gains profileLabel/isTie).
+ // The quiz keeps quizVersion around so the result can say "based on the
+-// current questionnaire (v1)".
++// current questionnaire (v1)". history comes from the GET payload (newest
++// first, latest 10) — after a retake we re-load so the list stays truthful.
++
++export interface HistoryItem {
++  takenAt: string;
++  vata: number;
++  pitta: number;
++  kapha: number;
++  vataPct?: number;
++  pittaPct?: number;
++  kaphaPct?: number;
++  profileLabel?: string;
++  isTie?: boolean;
++}
+ 
+ export default function PrakritiQuiz() {
+   const [state, setState] = useState<'loading' | 'quiz' | 'result' | 'error'>('loading');
+   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
+   const [profile, setProfile] = useState<ProfileView | null>(null);
++  const [history, setHistory] = useState<HistoryItem[]>([]);
+   const [quizVersion, setQuizVersion] = useState<number | null>(null);
+   const [answers, setAnswers] = useState<Record<string, string>>({});
+   const [submitting, setSubmitting] = useState(false);
+@@ -31,6 +45,7 @@ export default function PrakritiQuiz() {
+       const data = await res.json();
+       setQuestions(data.questions ?? []);
+       setProfile(data.profile ?? null);
++      setHistory(Array.isArray(data.history) ? data.history : []);
+       setQuizVersion(typeof data.quizVersion === 'number' ? data.quizVersion : null);
+       setAnswers(data.profile?.answers ?? {});
+       setState(data.profile ? 'result' : 'quiz');
+@@ -53,9 +68,9 @@ export default function PrakritiQuiz() {
+       });
+       const data = await res.json();
+       if (!res.ok) throw new Error(data?.error ?? 'Could not save your answers.');
+-      setProfile(data.profile);
+-      if (typeof data.quizVersion === 'number') setQuizVersion(data.quizVersion);
+-      setState('result');
++      // Re-load so the history list and latest profile both come from the
++      // same GET (single source of truth; the POST response is not used for state).
++      await load();
+     } catch (e) {
+       setError(e instanceof Error ? e.message : 'Something went wrong.');
+     } finally {
+@@ -70,6 +85,7 @@ export default function PrakritiQuiz() {
+     return (
+       <PrakritiResult
+         profile={profile}
++        history={history}
+         quizVersion={quizVersion}
+         onRetake={() => { setAnswers({}); setState('quiz'); }}
+       />
+diff --git a/apps/web/src/components/PrakritiResult.tsx b/apps/web/src/components/PrakritiResult.tsx
+index 4e1c2b4..e698c77 100644
+--- a/apps/web/src/components/PrakritiResult.tsx
++++ b/apps/web/src/components/PrakritiResult.tsx
+@@ -12,6 +12,7 @@
+ import { useState } from 'react';
+ import Link from 'next/link';
+ import { DOSHA_INFO, TRADITION_REFLECTIONS, topDoshas, type DoshaKey } from '@/lib/ayurveda-content';
++import type { HistoryItem } from './PrakritiQuiz';
+ 
+ export interface ProfileView {
+   answers: Record<string, string>;
+@@ -41,9 +42,10 @@ function istTaken(takenAt: string): string {
+ }
+ 
+ export default function PrakritiResult({
+-  profile, quizVersion, onRetake,
++  profile, history, quizVersion, onRetake,
+ }: {
+   profile: ProfileView;
++  history: HistoryItem[];
+   quizVersion: number | null;
+   onRetake: () => void;
+ }) {
+@@ -124,6 +126,49 @@ export default function PrakritiResult({
+         Self-reported answers — not medical measurements.
+       </p>
+ 
++      {/* Assessment history + deltas vs the previous attempt (B0-8) */}
++      <h3 className="mt-6 text-sm font-semibold">Your assessment history</h3>
++      {history.length <= 1 ? (
++        <p className="mt-1 text-xs text-neutral-500">
++          Every retake is kept — take the quiz again after a few weeks and both attempts will sit here side by side.
++        </p>
++      ) : (
++        <ul className="mt-2 space-y-1.5">
++          {history.map((h, i) => {
++            const prev = i > 0 ? history[i - 1] : null;
++            const delta = (a: number, b?: number) =>
++              prev && b !== undefined ? a - b : null;
++            const dv = delta(h.vata, prev?.vata);
++            const dp = delta(h.pitta, prev?.pitta);
++            const dk = delta(h.kapha, prev?.kapha);
++            const fmt = (d: number | null) =>
++              d === null ? '' : d === 0 ? '±0' : d > 0 ? `+${d}` : `${d}`;
++            return (
++              <li
++                key={h.takenAt}
++                className="flex flex-wrap items-baseline justify-between gap-x-3 rounded-lg border border-neutral-200 px-3 py-2 text-xs dark:border-neutral-800"
++              >
++                <span className="text-neutral-500">{istTaken(h.takenAt)}</span>
++                <span className="font-medium">{h.profileLabel ?? `${h.vata}/${h.pitta}/${h.kapha}`}</span>
++                <span className="tabular-nums text-neutral-500">
++                  V {h.vata} · P {h.pitta} · K {h.kapha}
++                </span>
++                {prev && (
++                  <span className="tabular-nums text-neutral-400" title="Change vs the newer attempt">
++                    vs previous: V {fmt(dv)} · P {fmt(dp)} · K {fmt(dk)}
++                  </span>
++                )}
++                {i === 0 && (
++                  <span className="rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
++                    latest
++                  </span>
++                )}
++              </li>
++            );
++          })}
++        </ul>
++      )}
++
+       {/* What this tradition suggests (B0-6) */}
+       <h3 className="mt-6 text-sm font-semibold">What this tradition suggests</h3>
+       <span className="mt-1 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+-- 
+2.47.3
+
