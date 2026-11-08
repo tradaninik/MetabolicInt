@@ -1,5 +1,14 @@
 'use client';
 
+// P0 (/log revamp): the region selector is pinned ABOVE every food choice
+// (RegionBar) and the page is organized into three ways in - Snap (photo
+// first), Repeat (one-tap recent meals) and Build (search + tray). The
+// tray, save loop and every existing behavior (combos, recipes, plate
+// presets, taste/viruddha lenses, offline queue, portion memory, custom
+// foods, post-meal check-in, agni banner) are preserved; region choice now
+// also drives the food list, plate order, default portions and the
+// meal-window hint, and persists to the profile.
+
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import AppShell from '@/components/AppShell';
@@ -7,6 +16,8 @@ import PostMealFeedback from '@/components/PostMealFeedback';
 import RecentMeals from '@/components/RecentMeals';
 import DayTagPicker from '@/components/DayTagPicker'; // Phase 2c: day-context tags
 import AddCustomFood from '@/components/AddCustomFood'; // C2: F1 form mount
+import RegionBar from '@/components/log/RegionBar';
+import RepeatMode, { type RepeatEntryRow, type RepeatMeal } from '@/components/log/RepeatMode';
 import { blendRecipe } from '@/lib/recipe-blend'; // C3: F3 tray-as-food blend
 import type { Food, GlucoseSpike } from '@mi/engine';
 import {
@@ -27,6 +38,15 @@ import {
 import { FOOD_INDEX, REGION_LABELS, tasteOf, viruddhaTagsOf, findViruddhaTagsByName } from '@mi/food-db'; // C2: FOOD_INDEX for the placeholder count
 import { classifyMealType } from '@/lib/meal-bits';
 import { PLATES, getPlateItems } from '@/lib/plates';
+import {
+  REGION_GROUP_MAP,
+  defaultPortionFor,
+  platesForGroup,
+  primaryRegionOf,
+  regionParam,
+  resolveRegionGroup,
+  type RegionGroupKey,
+} from '@/lib/regions';
 import { enqueueMeals, registerMealSync } from '@/lib/offlineQueue'; // P5-b: offline meal queue
 
 interface TrayItem {
@@ -67,6 +87,14 @@ const WHEN_OPTIONS: { label: string; minutes: number }[] = [
   { label: '3 hrs ago', minutes: 180 },
 ];
 
+const MODES: { key: 'snap' | 'repeat' | 'build'; label: string; icon: string }[] = [
+  { key: 'snap', label: 'Snap', icon: '\u{1F4F7}' },
+  { key: 'repeat', label: 'Repeat', icon: '\u{1F501}' },
+  { key: 'build', label: 'Build', icon: '\u{1F50D}' },
+];
+
+const REGION_LS_KEY = 'mi-region-group';
+
 function itemGrams(it: TrayItem): number {
   if (it.portionType === 'grams') return it.portionValue;
   if (it.portionType === 'katori') return it.portionValue * (it.food.katoriGrams ?? it.food.servingGrams);
@@ -78,7 +106,7 @@ export default function LogPage() {
   const [results, setResults] = useState<Food[]>([]);
   const [fallback, setFallback] = useState(false);
   const [category, setCategory] = useState('');
-  const [region, setRegion] = useState('');
+  const [regionGroup, setRegionGroup] = useState<RegionGroupKey>('general');
   const [sensitivity, setSensitivity] = useState(1.5);
   const [diabetic, setDiabetic] = useState(false);
   const [tray, setTray] = useState<TrayItem[]>([]);
@@ -113,6 +141,10 @@ export default function LogPage() {
   const [addFoodPanel, setAddFoodPanel] = useState<{ mode: 'search' | 'recipe'; initial: Record<string, unknown> } | null>(null);
   const [lastPortions, setLastPortions] = useState<Record<string, { portionType: 'serving' | 'katori' | 'grams'; portionValue: number }>>({});
   const [portionHint, setPortionHint] = useState<string | null>(null);
+  // P0: three modes + repeat-mode data.
+  const [mode, setMode] = useState<'snap' | 'repeat' | 'build'>('build');
+  const [recentEntries, setRecentEntries] = useState<RepeatEntryRow[]>([]);
+  const [repeatBusy, setRepeatBusy] = useState(false);
 
   // Load user's saved combos.
   useEffect(() => {
@@ -130,6 +162,15 @@ export default function LogPage() {
       .catch(() => {});
   }, []);
 
+  // Region: localStorage first (instant, offline-friendly), then the profile
+  // (server truth) overrides if it has a region. Both run once on mount.
+  useEffect(() => {
+    try {
+      const v = window.localStorage.getItem(REGION_LS_KEY);
+      if (v && REGION_GROUP_MAP[v as RegionGroupKey]) setRegionGroup(v as RegionGroupKey);
+    } catch { /* private mode - the default stands */ }
+  }, []);
+
   // Load user sensitivity for the live preview.
   useEffect(() => {
     fetch('/api/me/profile')
@@ -138,31 +179,38 @@ export default function LogPage() {
         if (d) {
           setSensitivity(d.sensitivity ?? 1.5);
           setDiabetic(!!d.diabetic);
-          if (d.region) setRegion(d.region);
+          if (d.region) setRegionGroup(resolveRegionGroup(d.region));
         }
       })
       .catch(() => {});
   }, []);
 
-  // C2 (F7 portion memory): the last portion used per food becomes the
-  // default when adding it again ("last time: 2 katori") - a default,
-  // never a demand. Entries arrive newest-first, so the first sighting of
-  // a foodId is its most recent portion.
+  // C2 (F7 portion memory) + P0 Repeat mode: one fetch feeds both the
+  // last-used-portion map and the recent-entries list the repeat cards are
+  // built from. Refreshes whenever a save lands (meals-updated).
   useEffect(() => {
-    fetch('/api/meals')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        const entries = (d?.entries ?? []) as { foodId: string; portionType: 'serving' | 'katori' | 'grams'; portionValue: number }[];
-        const map: Record<string, { portionType: 'serving' | 'katori' | 'grams'; portionValue: number }> = {};
-        for (const e of entries) {
-          if (!map[e.foodId]) map[e.foodId] = { portionType: e.portionType, portionValue: e.portionValue };
-        }
-        setLastPortions(map);
-      })
-      .catch(() => {});
+    const loadMeals = () => {
+      fetch('/api/meals')
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          const entries = (d?.entries ?? []) as RepeatEntryRow[];
+          const map: Record<string, { portionType: 'serving' | 'katori' | 'grams'; portionValue: number }> = {};
+          for (const e of entries) {
+            if (!map[e.foodId]) map[e.foodId] = { portionType: e.portionType, portionValue: e.portionValue };
+          }
+          setLastPortions(map);
+          setRecentEntries(entries);
+        })
+        .catch(() => {});
+    };
+    loadMeals();
+    const handler = () => loadMeals();
+    window.addEventListener('meals-updated', handler);
+    return () => window.removeEventListener('meals-updated', handler);
   }, []);
 
   // Debounced search / browse. Empty query + a category chip = browse that category.
+  // P0: the region filter comes from the pinned selector's group (csv).
   useEffect(() => {
     if (!query.trim() && !category && !mineOnly) {
       setResults([]);
@@ -172,13 +220,14 @@ export default function LogPage() {
     const t = setTimeout(async () => {
       const params = new URLSearchParams();
       if (query.trim()) params.set('q', query.trim());
-      if (region) params.set('region', region);
+      const rp = regionParam(regionGroup);
+      if (rp) params.set('region', rp);
       if (category) params.set('category', category);
       if (mineOnly) params.set('mine', '1'); // C2 (F6): the Mine chip
       const res = await fetch(`/api/foods?${params.toString()}`);
       if (res.ok) {
         const j = await res.json();
-        if (j.foods.length === 0 && region && !mineOnly) {
+        if (j.foods.length === 0 && rp && !mineOnly) {
           const p2 = new URLSearchParams();
           if (query.trim()) p2.set('q', query.trim());
           if (category) p2.set('category', category);
@@ -196,7 +245,7 @@ export default function LogPage() {
       }
     }, 200);
     return () => clearTimeout(t);
-  }, [query, region, category, mineOnly]);
+  }, [query, regionGroup, category, mineOnly]);
 
   const whenMs = useMemo(() => Date.now() - whenMin * 60_000, [whenMin]);
 
@@ -246,6 +295,9 @@ export default function LogPage() {
     : null;
 
   const mealType = items.length > 0 ? classifyMealType(whenMs, totals.nc) : null;
+
+  // P0: the region group's plates, curated order first.
+  const orderedPlates = useMemo(() => platesForGroup(regionGroup), [regionGroup]);
 
   // P4c-b / U16: "Tastes in this meal" - the Ayurveda lens over the current tray.
   // Items without classical taste data (custom foods) count toward totals only.
@@ -308,11 +360,45 @@ export default function LogPage() {
       ? estimateGlucoseSpike({ carbsG: totals.nc, gi: totals.gi, sensitivity, mealAt: whenMs, activityAfterMin: 15 })
       : null;
 
+  // P0: combined prediction for an arbitrary item list (repeat cards) - the
+  // same math as the tray preview, so both paths show one honest number.
+  function combinedSpikeFor(list: TrayItem[], at: number): { spike: GlucoseSpike; nc: number } | null {
+    if (list.length === 0) return null;
+    let nc = 0;
+    let giW = 0;
+    let giWt = 0;
+    for (const x of list) {
+      const grams = itemGrams(x);
+      const macros = macrosForGrams(x.food, grams);
+      const n = netCarbsG(macros.carbsG, macros.fiberG);
+      nc += n;
+      const w = Math.max(n, 1);
+      giW += x.food.gi * w;
+      giWt += w;
+    }
+    return {
+      spike: estimateGlucoseSpike({ carbsG: nc, gi: giWt > 0 ? giW / giWt : 0, sensitivity, mealAt: at }),
+      nc,
+    };
+  }
+
   function trayLabel(): string {
     if (tray.length === 0) return 'meal';
     if (tray.length === 1) return tray[0].food.name;
     const two = tray.slice(0, 2).map((t) => t.food.name).join(' + ');
     return tray.length > 2 ? `${two} +${tray.length - 2} more` : two;
+  }
+
+  // P0: the pinned selector's change handler - instant local switch, then
+  // best-effort persistence (localStorage + profile). Never blocks logging.
+  function changeRegion(g: RegionGroupKey) {
+    setRegionGroup(g);
+    try { window.localStorage.setItem(REGION_LS_KEY, g); } catch { /* private mode */ }
+    fetch('/api/me/region', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ region: primaryRegionOf(g) }),
+    }).catch(() => {});
   }
 
   async function saveCombo() {
@@ -341,6 +427,7 @@ export default function LogPage() {
     setTray(c.items.map((x) => ({ food: x.food, portionType: x.portionType, portionValue: x.portionValue })));
     setSavedMsg(null);
     setError(null);
+    setMode('build');
   }
 
   // P6-a: a recipe fills the tray with every ingredient at its stored portion
@@ -368,9 +455,9 @@ export default function LogPage() {
   function addPlate(plateId: string) {
     const plate = PLATES.find((x) => x.id === plateId);
     if (!plate) return;
-    const items = getPlateItems(plate);
-    if (items.length === 0) return;
-    setTray(items.map((x) => ({ food: x.food, portionType: x.portionType, portionValue: x.portionValue })));
+    const plateItems = getPlateItems(plate);
+    if (plateItems.length === 0) return;
+    setTray(plateItems.map((x) => ({ food: x.food, portionType: x.portionType, portionValue: x.portionValue })));
     setSavedMsg(null);
     setError(null);
   }
@@ -379,7 +466,8 @@ export default function LogPage() {
     setSavedMsg(null);
     setError(null);
     // C2 (F7): default to this food's last-used portion when it still
-    // applies (katori only exists for foods that define one).
+    // applies (katori only exists for foods that define one); otherwise the
+    // region group's default (katori culture vs roti counts).
     const last = lastPortions[f.id];
     const applies = last !== undefined && (last.portionType !== 'katori' || f.katoriGrams != null);
     if (applies && last) {
@@ -388,6 +476,7 @@ export default function LogPage() {
     } else {
       setPortionHint(null);
     }
+    const def = defaultPortionFor(regionGroup, f);
     setTray((t) => {
       const existing = t.findIndex((x) => x.food.id === f.id);
       if (existing >= 0) {
@@ -397,8 +486,8 @@ export default function LogPage() {
       }
       return [...t, {
         food: f,
-        portionType: applies && last ? last.portionType : 'serving',
-        portionValue: applies && last ? last.portionValue : 1,
+        portionType: applies && last ? last.portionType : def.portionType,
+        portionValue: applies && last ? last.portionValue : def.portionValue,
       }];
     });
   }
@@ -434,16 +523,21 @@ export default function LogPage() {
     setSavedMsg(null);
   }
 
-  async function save() {
-    if (items.length === 0) return;
-    setSaving(true);
-    setError(null);
-    setSavedMsg(null);
-    setOfflineSavedMsg(null);
-    setAgniBanner(null);
-    setViruddhaBanner(null);
-    const label = trayLabel();
-    const loggedAt = whenMs;
+  function clearPhotoInput() {
+    setPhotoPath(null);
+    if (fileRef.current) fileRef.current.value = '';
+  }
+
+  // P0: the shared save loop - used by the tray (Build) and the one-tap
+  // repeat cards. POST bodies, the 2-hour check-in capture, the same-meal
+  // viruddha collection, the day-so-far note, the agni banner and the
+  // offline queue path are identical to the pre-P0 tray save.
+  async function saveItems(
+    toSave: { foodId: string; foodName: string; portionType: 'serving' | 'katori' | 'grams'; portionValue: number }[],
+    opts: { label: string; mealTypeLabel: string; spikeDelta: number; at: number; clearTray: boolean },
+  ): Promise<void> {
+    if (toSave.length === 0) return;
+    const loggedAt = opts.at;
     let lastCheckIn: { label?: string; dueAt: number } | null = null;
     let savedCount = 0;
     // P4c-c / U19: pairing notes returned by the meals API across the save loop,
@@ -451,20 +545,20 @@ export default function LogPage() {
     const seenPairIds = new Set<string>();
     const collectedViruddha: ViruddhaFinding[] = [];
     try {
-      for (let i = 0; i < tray.length; i++) {
-        const it = tray[i];
+      for (let i = 0; i < toSave.length; i++) {
+        const it = toSave[i];
         const res = await fetch('/api/meals', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            foodId: it.food.id,
+            foodId: it.foodId,
             portionType: it.portionType,
             portionValue: it.portionValue,
             ...(i === 0 ? { photoPath, notes } : {}),
             loggedAt,
           }),
         });
-        if (!res.ok) throw new Error(`could not save ${it.food.name}`);
+        if (!res.ok) throw new Error(`could not save ${it.foodName}`);
         const j = await res.json();
         if (j.checkIn) lastCheckIn = j.checkIn as { label?: string; dueAt: number };
         if (Array.isArray(j.viruddha?.findings)) {
@@ -509,8 +603,7 @@ export default function LogPage() {
         // summary is a bonus, never a blocker
       }
 
-      const spike = previewSpike?.deltaMgDl ?? 0;
-      setSavedMsg(`Logged ${label} (${mealType}). Predicted glucose rise about ${Math.round(spike)} mg/dL.${dayNote}`);
+      setSavedMsg(`Logged ${opts.label} (${opts.mealTypeLabel}). Predicted glucose rise about ${Math.round(opts.spikeDelta)} mg/dL.${dayNote}`);
       // P4c-b / U17: the meal landed deep in a low-agni window (20:30-06:00 IST) ->
       // gentle educational banner. Normal breakfast/dinner times never trigger it.
       const banner = lateMealBanner(istMinuteOfDay(loggedAt));
@@ -518,9 +611,9 @@ export default function LogPage() {
       // P4c-c / U19: amber pairing notes from the same-meal window check.
       if (collectedViruddha.length > 0) setViruddhaBanner(collectedViruddha);
       if (lastCheckIn) {
-        setPostMeal({ loggedAt, name: lastCheckIn.label ?? label, dueAt: lastCheckIn.dueAt });
+        setPostMeal({ loggedAt, name: lastCheckIn.label ?? opts.label, dueAt: lastCheckIn.dueAt });
       }
-      setTray([]);
+      if (opts.clearTray) setTray([]);
       setQuery('');
       setResults([]);
       setPhotoPath(null);
@@ -533,15 +626,15 @@ export default function LogPage() {
       // mobile data) queues the unsaved items on-device and replays them
       // automatically. A server rejection (bad data, auth) is NOT offline -
       // queueing it would retry a meal the server already refused.
-      const remaining = tray.slice(savedCount);
+      const remaining = toSave.slice(savedCount);
       const isNetworkFailure = err instanceof TypeError;
       if (isNetworkFailure && remaining.length > 0) {
         try {
           const n = await enqueueMeals(
             remaining.map((it, idx) => ({
-              foodName: it.food.name,
+              foodName: it.foodName,
               body: {
-                foodId: it.food.id,
+                foodId: it.foodId,
                 portionType: it.portionType,
                 portionValue: it.portionValue,
                 // photo/notes ride the first item only - same as the online path.
@@ -553,7 +646,7 @@ export default function LogPage() {
           setOfflineSavedMsg(
             `Offline - saved ${n} item${n === 1 ? '' : 's'} on this phone. ${n === 1 ? 'It' : 'They'} will sync automatically once you're back online.`,
           );
-          setTray([]);
+          if (opts.clearTray) setTray([]);
           setQuery('');
           setResults([]);
           setPhotoPath(null);
@@ -568,11 +661,71 @@ export default function LogPage() {
           // to the honest error below.
         }
       }
-      setTray((t) => t.slice(savedCount));
-      setError(`Saved ${savedCount} of ${tray.length} items. Could not save the rest - please try again.`);
+      if (opts.clearTray) setTray((t) => t.slice(savedCount));
+      setError(`Saved ${savedCount} of ${toSave.length} items. Could not save the rest - please try again.`);
+    }
+  }
+
+  async function save() {
+    if (items.length === 0) return;
+    setSaving(true);
+    setError(null);
+    setSavedMsg(null);
+    setOfflineSavedMsg(null);
+    setAgniBanner(null);
+    setViruddhaBanner(null);
+    try {
+      await saveItems(
+        tray.map((x) => ({ foodId: x.food.id, foodName: x.food.name, portionType: x.portionType, portionValue: x.portionValue })),
+        {
+          label: trayLabel(),
+          mealTypeLabel: mealType ?? 'meal',
+          spikeDelta: previewSpike?.deltaMgDl ?? 0,
+          at: whenMs,
+          clearTray: true,
+        },
+      );
     } finally {
       setSaving(false);
     }
+  }
+
+  // P0 Repeat mode: one tap saves the whole meal immediately through the
+  // shared loop (same endpoints, same check-in and pairing behavior).
+  async function repeatSave(card: RepeatMeal) {
+    setRepeatBusy(true);
+    setError(null);
+    setSavedMsg(null);
+    setOfflineSavedMsg(null);
+    setAgniBanner(null);
+    setViruddhaBanner(null);
+    try {
+      const combo = combinedSpikeFor(
+        card.items.map((x) => ({ food: x.food, portionType: x.portionType, portionValue: x.portionValue })),
+        whenMs,
+      );
+      await saveItems(
+        card.items.map((i) => ({ foodId: i.foodId, foodName: i.food.name, portionType: i.portionType, portionValue: i.portionValue })),
+        {
+          label: card.label,
+          mealTypeLabel: combo ? classifyMealType(whenMs, combo.nc) : 'meal',
+          spikeDelta: combo ? combo.spike.deltaMgDl : 0,
+          at: whenMs,
+          clearTray: false,
+        },
+      );
+    } finally {
+      setRepeatBusy(false);
+    }
+  }
+
+  // P0 Repeat mode: "Edit first" - load the card's items into the tray.
+  function loadCardIntoTray(card: RepeatMeal) {
+    if (card.items.length === 0) return;
+    setTray(card.items.map((x) => ({ food: x.food, portionType: x.portionType, portionValue: x.portionValue })));
+    setSavedMsg(null);
+    setError(null);
+    setMode('build');
   }
 
   return (
@@ -580,268 +733,341 @@ export default function LogPage() {
       <div className="mx-auto max-w-3xl">
         <h1 className="text-2xl font-semibold tracking-tight">Log a meal</h1>
         <p className="mt-1 text-sm text-neutral-500">
-          Add each item to your tray, set portions, and see the combined prediction for the whole meal.
+          Pick your region, then log it your way - photo, one-tap repeat, or build the plate.
         </p>
 
-        {/* Photo capture (kept from v1) */}
-        <div className="mt-6 rounded-xl border border-dashed border-neutral-300 p-4 dark:border-neutral-700">
-          <div className="flex items-center gap-3">
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              onChange={(e) => e.target.files?.[0] && handlePhoto(e.target.files[0])}
-              className="text-xs"
-            />
-            {photoPath && <img src={photoPath} alt="meal" className="h-16 w-16 rounded-lg object-cover" />}
-          </div>
-          <p className="mt-2 text-[11px] text-neutral-400">
-            Photo is stored locally for now. Automatic food recognition is a later upgrade - for now, add items below.
-          </p>
-        </div>
+        {/* P0: the pinned region selector - ABOVE every food choice. */}
+        <RegionBar group={regionGroup} onChange={changeRegion} />
 
-        <p className="mt-6 text-xs font-medium text-neutral-500">Plates - one tap loads a full meal:</p>
-        <div className="mt-2 -mx-1 overflow-x-auto px-1 pb-1">
-          <div className="flex gap-2">
-            {PLATES.map((pl) => (
+        {/* P0: three ways in - Snap / Repeat / Build. */}
+        <div className="mt-4 grid grid-cols-3 gap-2" role="tablist" aria-label="How do you want to log?">
+          {MODES.map((m) => {
+            const active = mode === m.key;
+            return (
               <button
-                key={pl.id}
-                onClick={() => addPlate(pl.id)}
-                title={pl.description}
-                className="shrink-0 rounded-full border border-brand-200 bg-brand-50/50 px-3 py-1.5 text-xs font-medium text-brand-700 hover:bg-brand-100 dark:border-brand-800 dark:bg-brand-950/30 dark:text-brand-300"
+                key={m.key}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setMode(m.key)}
+                className={`flex min-h-[52px] flex-col items-center justify-center rounded-xl border px-2 py-2 text-xs font-medium ${
+                  active
+                    ? 'border-brand-500 bg-brand-50 text-brand-700 dark:border-brand-500 dark:bg-brand-950/40 dark:text-brand-300'
+                    : 'border-neutral-200 bg-white text-neutral-600 hover:border-brand-300 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400'
+                }`}
               >
-                {pl.name}
+                <span aria-hidden className="text-base leading-none">{m.icon}</span>
+                <span className="mt-1">{m.label}</span>
               </button>
-            ))}
-          </div>
+            );
+          })}
         </div>
 
-        {myCombos.length > 0 && (
-          <div className="mb-2">
-            <p className="text-xs font-medium text-neutral-500">My combos - saved by you:</p>
-            <div className="mt-2 -mx-1 overflow-x-auto px-1 pb-1">
-              <div className="flex gap-2">
-                {myCombos.map((c, i) => (
-                  <span key={c.id} className="flex shrink-0 items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50/50 px-3 py-1.5 text-xs font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300">
-                    <button type="button" onClick={() => loadComboIntoTray(i)} title={c.items.length + ' items'} className="hover:underline">{c.name}</button>
-                    <button type="button" onClick={() => removeCombo(c.id)} aria-label="remove combo" className="text-neutral-400 hover:text-red-500">x</button>
-                  </span>
-                ))}
-              </div>
+        {/* ---- Mode 1: Snap (photo first; AI recognition lands in P1) ---- */}
+        {mode === 'snap' && (
+          <div className="mt-4 rounded-2xl border border-dashed border-neutral-300 p-5 dark:border-neutral-700">
+            <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
+              <label className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-lg border border-brand-300 bg-brand-50 px-5 py-2.5 text-sm font-medium text-brand-700 hover:bg-brand-100 dark:border-brand-800 dark:bg-brand-950/40 dark:text-brand-300">
+                <span aria-hidden>{'\u{1F4F7}'}</span>
+                Take or choose a photo
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={(e) => e.target.files?.[0] && handlePhoto(e.target.files[0])}
+                  className="hidden"
+                />
+              </label>
+              {photoPath && (
+                <div className="flex items-center gap-2">
+                  <img src={photoPath} alt="meal" className="h-16 w-16 rounded-lg object-cover" />
+                  <button type="button" onClick={clearPhotoInput} className="text-xs text-neutral-500 hover:underline">
+                    remove
+                  </button>
+                </div>
+              )}
             </div>
+            <p className="mt-3 text-[11px] leading-relaxed text-neutral-400">
+              The photo is saved with your meal. Automatic food recognition arrives in the next
+              update - for now, snap it, then add or repeat the items below.
+            </p>
+            {photoPath && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMode('build')}
+                  className="min-h-[40px] rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
+                >
+                  Add the items to this meal
+                </button>
+                {recentEntries.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setMode('repeat')}
+                    className="min-h-[40px] rounded-lg border border-neutral-300 px-4 py-2 text-sm text-neutral-700 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-900"
+                  >
+                    Or repeat a recent meal
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         )}
 
-        {/* P6-a: recipes row - same one-tap fill as combos, per-serving numbers on the chip. */}
-        {myRecipes.length > 0 && (
-          <div className="mb-2">
-            <p className="text-xs font-medium text-neutral-500">My recipes - per serving shown:</p>
+        {/* ---- Mode 2: Repeat (one-tap recent meals) ---- */}
+        {mode === 'repeat' && (
+          <RepeatMode
+            entries={recentEntries}
+            busy={saving || repeatBusy}
+            whenMin={whenMin}
+            onWhenChange={setWhenMin}
+            whenLabel={fmtWhen(whenMs)}
+            onRepeat={repeatSave}
+            onLoadIntoTray={loadCardIntoTray}
+          />
+        )}
+
+        {/* ---- Mode 3: Build (search + plates + combos + recipes) ---- */}
+        {mode === 'build' && (
+          <>
+            {/* Plates - one tap loads a full meal; the region group's plates come first. */}
+            <p className="mt-6 text-xs font-medium text-neutral-500">Plates - one tap loads a full meal:</p>
             <div className="mt-2 -mx-1 overflow-x-auto px-1 pb-1">
               <div className="flex gap-2">
-                {myRecipes.map((r) => (
+                {orderedPlates.map((pl) => (
                   <button
-                    key={r.id}
-                    type="button"
-                    onClick={() => loadRecipeIntoTray(r.id)}
-                    title={`${r.items.length} ingredients - loads the whole recipe; halve portions for one serving`}
-                    className="shrink-0 rounded-full border border-violet-200 bg-violet-50/50 px-3 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-100 dark:border-violet-800 dark:bg-violet-950/30 dark:text-violet-300"
+                    key={pl.id}
+                    onClick={() => addPlate(pl.id)}
+                    title={pl.description}
+                    className="shrink-0 rounded-full border border-brand-200 bg-brand-50/50 px-3 py-1.5 text-xs font-medium text-brand-700 hover:bg-brand-100 dark:border-brand-800 dark:bg-brand-950/30 dark:text-brand-300"
                   >
-                    {r.name} · {r.nutrition.kcal} kcal/serv
+                    {pl.name}
                   </button>
                 ))}
               </div>
             </div>
-          </div>
+
+            {myCombos.length > 0 && (
+              <div className="mb-2">
+                <p className="text-xs font-medium text-neutral-500">My combos - saved by you:</p>
+                <div className="mt-2 -mx-1 overflow-x-auto px-1 pb-1">
+                  <div className="flex gap-2">
+                    {myCombos.map((c, i) => (
+                      <span key={c.id} className="flex shrink-0 items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50/50 px-3 py-1.5 text-xs font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300">
+                        <button type="button" onClick={() => loadComboIntoTray(i)} title={c.items.length + ' items'} className="hover:underline">{c.name}</button>
+                        <button type="button" onClick={() => removeCombo(c.id)} aria-label="remove combo" className="text-neutral-400 hover:text-red-500">x</button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* P6-a: recipes row - same one-tap fill as combos, per-serving numbers on the chip. */}
+            {myRecipes.length > 0 && (
+              <div className="mb-2">
+                <p className="text-xs font-medium text-neutral-500">My recipes - per serving shown:</p>
+                <div className="mt-2 -mx-1 overflow-x-auto px-1 pb-1">
+                  <div className="flex gap-2">
+                    {myRecipes.map((r) => (
+                      <button
+                        key={r.id}
+                        type="button"
+                        onClick={() => loadRecipeIntoTray(r.id)}
+                        title={`${r.items.length} ingredients - loads the whole recipe; halve portions for one serving`}
+                        className="shrink-0 rounded-full border border-violet-200 bg-violet-50/50 px-3 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-100 dark:border-violet-800 dark:bg-violet-950/30 dark:text-violet-300"
+                      >
+                        {r.name}{' \u00b7 '}{r.nutrition.kcal} kcal/serv
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Category chips */}
+            <div className="mt-6 -mx-1 overflow-x-auto px-1 pb-1">
+              <div className="flex gap-2">
+                {CATEGORY_CHIPS.map((c) => (
+                  <button
+                    key={c.value || 'all'}
+                    onClick={() => setCategory(c.value)}
+                    className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium ${
+                      category === c.value
+                        ? 'border-brand-500 bg-brand-50 text-brand-700 dark:border-brand-500 dark:bg-brand-950/40 dark:text-brand-300'
+                        : 'border-neutral-200 text-neutral-600 hover:border-brand-300 dark:border-neutral-800 dark:text-neutral-400'
+                    }`}
+                  >
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Search (region comes from the pinned selector above) */}
+            <div className="mt-3">
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={category ? `Search within ${CATEGORY_CHIPS.find((c) => c.value === category)?.label ?? 'category'}...` : `Search ${Object.keys(FOOD_INDEX).length} foods - dosa, biryani, chapati, pizza...`}
+                className="w-full rounded-lg border border-neutral-300 bg-transparent px-4 py-3 outline-none focus:border-brand-500 dark:border-neutral-700"
+              />
+              <div className="mt-2 flex items-center gap-2 text-xs">
+                <span className="text-neutral-500">
+                  Region: <span className="font-medium text-neutral-600 dark:text-neutral-300">{REGION_GROUP_MAP[regionGroup]?.label ?? 'All'}</span>
+                  {regionGroup !== 'general' ? ' + common staples' : ' - all foods'}
+                </span>
+                <label className="ml-2 flex cursor-pointer items-center gap-1 text-neutral-600 dark:text-neutral-400">
+                  <input
+                    type="checkbox"
+                    checked={mineOnly}
+                    onChange={(e) => setMineOnly(e.target.checked)}
+                    className="accent-brand-600"
+                  />
+                  Mine only
+                </label>
+              </div>
+
+              {fallback && results.length > 0 && (
+                <p className='mt-2 text-xs text-neutral-500'>
+                  No {REGION_GROUP_MAP[regionGroup]?.label ?? 'regional'} matches for &quot;{query}&quot; - showing matches from all regions.
+                </p>
+              )}
+
+              {/* P6-a: recipe names surface in search - matching by recipe name or
+                  any ingredient name; one tap loads all ingredients into the tray. */}
+              {(() => {
+                const q = query.trim().toLowerCase();
+                if (!q) return null;
+                const hits = myRecipes.filter(
+                  (r) =>
+                    r.name.toLowerCase().includes(q) ||
+                    r.items.some((it) => it.food.name.toLowerCase().includes(q)),
+                ).slice(0, 3);
+                if (hits.length === 0) return null;
+                return (
+                  <ul className="mt-3 rounded-lg border border-violet-200 dark:border-violet-800">
+                    {hits.map((r) => (
+                      <li key={'recipe-' + r.id}>
+                        <button
+                          onClick={() => loadRecipeIntoTray(r.id)}
+                          className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm hover:bg-violet-50 dark:hover:bg-violet-950/30"
+                        >
+                          <span>
+                            <span aria-hidden className="mr-1.5">{'\u{1F373}'}</span>
+                            <span className="font-medium">{r.name}</span>
+                            <span className="ml-2 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
+                              recipe
+                            </span>
+                            <span className="ml-2 text-xs text-neutral-400">
+                              {r.items.length} ingredients{' \u00b7 '}{r.nutrition.kcal} kcal/serving{' \u00b7 '}{r.servings} serving{r.servings === 1 ? '' : 's'}
+                            </span>
+                          </span>
+                          <span className="text-xs font-medium text-violet-600 dark:text-violet-300">Load recipe</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                );
+              })()}
+
+              {results.length > 0 && (
+                <ul className="mt-3 max-h-72 overflow-y-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
+                  {results.map((f) => {
+                    // P4c-b / U16: classical taste + dosha overlay on curated foods.
+                    // Custom foods show nothing - honest coverage, no guessing.
+                    const taste = tasteOf(f.id);
+                    const advice = taste ? doshaFoodAdvice(taste) : null;
+                    return (
+                      <li key={f.id}>
+                        <button
+                          onClick={() => addFood(f)}
+                          className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm hover:bg-neutral-100 dark:hover:bg-neutral-900"
+                        >
+                          <span>
+                            <span className="font-medium">{f.name}</span>
+                            {f.id.startsWith('custom-') && (
+                              <span className="ml-2 rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
+                                yours
+                              </span>
+                            )}
+                            <span className="ml-2 text-xs text-neutral-400">{REGION_LABELS[f.region]} - GI {f.gi}</span>
+                            {taste && advice && (
+                              <span className="ml-2 inline-flex flex-wrap items-center gap-1 align-middle">
+                                <span
+                                  title={`Classical tastes: ${taste.rasa.map((r) => RASA_META[r].label).join(', ')}${taste.virya ? ` (${taste.virya})` : ''} - educational approximation`}
+                                  className="rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
+                                >
+                                  {taste.rasa.join(' \u00b7 ')}
+                                </span>
+                                <span
+                                  title={advice.label}
+                                  className="rounded-full bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300"
+                                >
+                                  {advice.badge}
+                                </span>
+                              </span>
+                            )}
+                          </span>
+                          <span className="text-xs font-medium text-brand-600">+ Add</span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+
+              {/* C2 (F6): search-miss empty state - the quiet door into the form,
+                  name prefilled from the failed query (journey J1). */}
+              {query.trim() && results.length === 0 && !mineOnly && (
+                <div className="mt-3 rounded-lg border border-dashed border-neutral-300 p-4 dark:border-neutral-700">
+                  <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                    Can&apos;t find &quot;{query.trim()}&quot;? You&apos;re one field away from logging it anyway.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => { setAddFoodPanel({ mode: 'search', initial: { name: query.trim() } }); }}
+                    className="mt-1 text-sm font-medium text-brand-600 hover:underline dark:text-brand-400"
+                  >
+                    Add your own food - only the name is required
+                  </button>
+                </div>
+              )}
+
+              {mineOnly && results.length === 0 && (
+                <p className="mt-3 text-sm text-neutral-500">
+                  Nothing here yet - foods you create show up in search with a &quot;yours&quot; badge.
+                </p>
+              )}
+
+              {/* C2 (F1): the creation form. On save, the new food drops straight
+                  into the tray - creating should feel like logging (spec 3.2). */}
+              {addFoodPanel && (
+                <div className="mt-4 rounded-2xl border border-neutral-200 p-4 dark:border-neutral-800">
+                  <h2 className="text-lg font-semibold">{addFoodPanel.mode === 'recipe' ? 'Save this tray as one food' : 'Add your own food'}</h2>
+
+                  <AddCustomFood
+                    initial={addFoodPanel.initial}
+                    onCreated={(f) => {
+                      const panelMode = addFoodPanel.mode;
+                      setAddFoodPanel(null);
+                      if (panelMode === 'recipe') {
+                        // The blend replaces the tray: one plate, one item (J3).
+                        setTray([{ food: f as unknown as Food, portionType: 'serving', portionValue: 1 }]);
+                      } else {
+                        addFood(f as unknown as Food);
+                      }
+                    }}
+                    onCancel={() => setAddFoodPanel(null)}
+                  />
+                </div>
+              )}
+            </div>
+          </>
         )}
 
-        {/* Category chips */}
-        <div className="mt-6 -mx-1 overflow-x-auto px-1 pb-1">
-          <div className="flex gap-2">
-            {CATEGORY_CHIPS.map((c) => (
-              <button
-                key={c.value || 'all'}
-                onClick={() => setCategory(c.value)}
-                className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium ${
-                  category === c.value
-                    ? 'border-brand-500 bg-brand-50 text-brand-700 dark:border-brand-500 dark:bg-brand-950/40 dark:text-brand-300'
-                    : 'border-neutral-200 text-neutral-600 hover:border-brand-300 dark:border-neutral-800 dark:text-neutral-400'
-                }`}
-              >
-                {c.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Search */}
-        <div className="mt-3">
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={category ? `Search within ${CATEGORY_CHIPS.find((c) => c.value === category)?.label ?? 'category'}...` : `Search ${Object.keys(FOOD_INDEX).length} foods - dosa, biryani, chapati, pizza...`}
-            className="w-full rounded-lg border border-neutral-300 bg-transparent px-4 py-3 outline-none focus:border-brand-500 dark:border-neutral-700"
-          />
-          <div className="mt-2 flex items-center gap-2 text-xs">
-            <span className="text-neutral-500">Region:</span>
-            <select
-              value={region}
-              onChange={(e) => setRegion(e.target.value)}
-              className="rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
-            >
-              <option value="">All regions</option>
-              {Object.entries(REGION_LABELS).map(([v, l]) => (
-                <option key={v} value={v}>{l}</option>
-              ))}
-            </select>
-            <label className="ml-2 flex cursor-pointer items-center gap-1 text-neutral-600 dark:text-neutral-400">
-              <input
-                type="checkbox"
-                checked={mineOnly}
-                onChange={(e) => setMineOnly(e.target.checked)}
-                className="accent-brand-600"
-              />
-              Mine only
-            </label>
-          </div>
-
-          {fallback && results.length > 0 && (
-            <p className='mt-2 text-xs text-neutral-500'>
-              No {(REGION_LABELS as Record<string, string | undefined>)[region] ?? 'regional'} matches for &quot;{query}&quot; - showing matches from all regions.
-            </p>
-          )}
-
-          {/* P6-a: recipe names surface in search - matching by recipe name or
-              any ingredient name; one tap loads all ingredients into the tray. */}
-          {(() => {
-            const q = query.trim().toLowerCase();
-            if (!q) return null;
-            const hits = myRecipes.filter(
-              (r) =>
-                r.name.toLowerCase().includes(q) ||
-                r.items.some((it) => it.food.name.toLowerCase().includes(q)),
-            ).slice(0, 3);
-            if (hits.length === 0) return null;
-            return (
-              <ul className="mt-3 rounded-lg border border-violet-200 dark:border-violet-800">
-                {hits.map((r) => (
-                  <li key={'recipe-' + r.id}>
-                    <button
-                      onClick={() => loadRecipeIntoTray(r.id)}
-                      className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm hover:bg-violet-50 dark:hover:bg-violet-950/30"
-                    >
-                      <span>
-                        <span aria-hidden className="mr-1.5">🍳</span>
-                        <span className="font-medium">{r.name}</span>
-                        <span className="ml-2 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
-                          recipe
-                        </span>
-                        <span className="ml-2 text-xs text-neutral-400">
-                          {r.items.length} ingredients · {r.nutrition.kcal} kcal/serving · {r.servings} serving{r.servings === 1 ? '' : 's'}
-                        </span>
-                      </span>
-                      <span className="text-xs font-medium text-violet-600 dark:text-violet-300">Load recipe</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            );
-          })()}
-
-          {results.length > 0 && (
-            <ul className="mt-3 max-h-72 overflow-y-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-              {results.map((f) => {
-                // P4c-b / U16: classical taste + dosha overlay on curated foods.
-                // Custom foods show nothing - honest coverage, no guessing.
-                const taste = tasteOf(f.id);
-                const advice = taste ? doshaFoodAdvice(taste) : null;
-                return (
-                  <li key={f.id}>
-                    <button
-                      onClick={() => addFood(f)}
-                      className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm hover:bg-neutral-100 dark:hover:bg-neutral-900"
-                    >
-                      <span>
-                        <span className="font-medium">{f.name}</span>
-                        {f.id.startsWith('custom-') && (
-                          <span className="ml-2 rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
-                            yours
-                          </span>
-                        )}
-                        <span className="ml-2 text-xs text-neutral-400">{REGION_LABELS[f.region]} - GI {f.gi}</span>
-                        {taste && advice && (
-                          <span className="ml-2 inline-flex flex-wrap items-center gap-1 align-middle">
-                            <span
-                              title={`Classical tastes: ${taste.rasa.map((r) => RASA_META[r].label).join(', ')}${taste.virya ? ` (${taste.virya})` : ''} - educational approximation`}
-                              className="rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
-                            >
-                              {taste.rasa.join(' \u00b7 ')}
-                            </span>
-                            <span
-                              title={advice.label}
-                              className="rounded-full bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300"
-                            >
-                              {advice.badge}
-                            </span>
-                          </span>
-                        )}
-                      </span>
-                      <span className="text-xs font-medium text-brand-600">+ Add</span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-
-          {/* C2 (F6): search-miss empty state - the quiet door into the form,
-              name prefilled from the failed query (journey J1). */}
-          {query.trim() && results.length === 0 && !mineOnly && (
-            <div className="mt-3 rounded-lg border border-dashed border-neutral-300 p-4 dark:border-neutral-700">
-              <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                Can&apos;t find &quot;{query.trim()}&quot;? You&apos;re one field away from logging it anyway.
-              </p>
-              <button
-                type="button"
-                onClick={() => { setAddFoodPanel({ mode: 'search', initial: { name: query.trim() } }); }}
-                className="mt-1 text-sm font-medium text-brand-600 hover:underline dark:text-brand-400"
-              >
-                Add your own food - only the name is required
-              </button>
-            </div>
-          )}
-
-          {mineOnly && results.length === 0 && (
-            <p className="mt-3 text-sm text-neutral-500">
-              Nothing here yet - foods you create show up in search with a &quot;yours&quot; badge.
-            </p>
-          )}
-
-          {/* C2 (F1): the creation form. On save, the new food drops straight
-              into the tray - creating should feel like logging (spec 3.2). */}
-          {addFoodPanel && (
-            <div className="mt-4 rounded-2xl border border-neutral-200 p-4 dark:border-neutral-800">
-              <h2 className="text-lg font-semibold">{addFoodPanel.mode === 'recipe' ? 'Save this tray as one food' : 'Add your own food'}</h2>
-              
-              <AddCustomFood
-                initial={addFoodPanel.initial}
-                onCreated={(f) => {
-                  const mode = addFoodPanel.mode;
-                  setAddFoodPanel(null);
-                  if (mode === 'recipe') {
-                    // The blend replaces the tray: one plate, one item (J3).
-                    setTray([{ food: f as unknown as Food, portionType: 'serving', portionValue: 1 }]);
-                  } else {
-                    addFood(f as unknown as Food);
-                  }
-                }}
-                onCancel={() => setAddFoodPanel(null)}
-              />
-            </div>
-          )}
-        </div>
-
-        {/* Tray */}
+        {/* Tray - shared by all three modes */}
         {items.length > 0 && (
           <div className="mt-6 rounded-2xl border border-neutral-200 p-5 dark:border-neutral-800">
             <div className="flex items-center justify-between">
@@ -854,6 +1080,16 @@ export default function LogPage() {
               </button>
             </div>
             {portionHint && <p className="mt-1 text-xs text-neutral-500">{portionHint}</p>}
+
+            {photoPath && (
+              <div className="mt-3 flex items-center gap-2 rounded-lg border border-neutral-200 p-2 dark:border-neutral-800">
+                <img src={photoPath} alt="meal photo" className="h-10 w-10 rounded object-cover" />
+                <span className="text-xs text-neutral-500">This photo will be saved with the meal.</span>
+                <button type="button" onClick={clearPhotoInput} className="ml-auto text-xs text-neutral-400 hover:text-red-500">
+                  remove
+                </button>
+              </div>
+            )}
 
             <ul className="mt-3 space-y-3">
               {items.map((x, i) => (
@@ -929,7 +1165,7 @@ export default function LogPage() {
                 <p className="mt-1.5 text-[11px] text-neutral-500">{tasteBalance.summary}</p>
                 <p className="mt-1 text-[10px] text-neutral-400">
                   Rasa assignments are classical educational approximations - not medical advice.
-                  {' '}<Link href="/healing-foods" className="underline hover:text-neutral-500">Food as Medicine →</Link>
+                  {' '}<Link href="/healing-foods" className="underline hover:text-neutral-500">Food as Medicine {'\u2192'}</Link>
                 </p>
               </div>
             )}
@@ -1078,7 +1314,7 @@ export default function LogPage() {
             <p className="font-medium">{agniBanner.title}</p>
             <p className="mt-1">{agniBanner.body}</p>
             <Link href="/healing-foods" className="mt-1 inline-block text-xs font-medium underline">
-              Food as Medicine: an early, light dinner →
+              Food as Medicine: an early, light dinner {'\u2192'}
             </Link>
           </div>
         )}
@@ -1142,7 +1378,7 @@ function ViruddhaNotes({ findings }: { findings: ViruddhaFinding[] }) {
       ))}
       <li className="pt-1 text-[10px] text-amber-700/80 dark:text-amber-400/80">
         {VIRUDDHA_DISCLAIMER}{' '}
-        <Link href="/healing-foods" className="underline hover:text-amber-900 dark:hover:text-amber-200">Food as Medicine →</Link>
+        <Link href="/healing-foods" className="underline hover:text-amber-900 dark:hover:text-amber-200">Food as Medicine {'\u2192'}</Link>
       </li>
     </ul>
   );

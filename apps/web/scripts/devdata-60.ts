@@ -44,7 +44,7 @@ function msg(e: any): string {
   const s = e && e.message ? String(e.message) : String(e);
   return ascii(s).replace(/\s+/g, " ").slice(0, 160);
 }
-function fatal(m: string): void {
+function fatal(m: string): never {
   console.log("FATAL " + ascii(m));
   process.exit(1);
 }

@@ -7,7 +7,14 @@ import { INGREDIENT_IDS } from '@mi/food-db';
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const q = url.searchParams.get('q')?.toLowerCase().trim() ?? '';
-  const region = url.searchParams.get('region'); // optional filter
+  // P0: region accepts comma-separated values (the /log region selector
+  // sends a cuisine group like "south_indian,tamil,telugu,kerala,global").
+  // A single value still works exactly as before.
+  const regionParam = url.searchParams.get('region') ?? '';
+  const regionList = regionParam
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
   const category = url.searchParams.get('category'); // optional filter
   const mine = url.searchParams.get('mine') === '1';
   // P7.1: ingredient mode for the recipe editor - catalog hits are restricted
@@ -20,7 +27,9 @@ export async function GET(req: Request) {
   const userId = await getSessionUserId().catch(() => null);
 
   const where: Prisma.FoodWhereInput = {
-    ...(region && region !== 'all' ? { region } : {}),
+    ...(regionList.length > 0 && !regionList.includes('all')
+      ? { region: { in: regionList } }
+      : {}),
     ...(category && category !== 'all' ? { category } : {}),
   };
 

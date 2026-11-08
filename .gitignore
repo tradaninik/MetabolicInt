@@ -36,3 +36,5 @@ nul
 .vercel
 .env*
 apps/web/tsconfig.tsbuildinfo
+*.p0-bak
+*.p0-done
