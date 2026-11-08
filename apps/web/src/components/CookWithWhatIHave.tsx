@@ -15,6 +15,7 @@
 // Saving works exactly like the catalog browser: POST /api/recipes/from-catalog
 // (idempotent - 201 fresh / 200 already saved).
 import { useCallback, useEffect, useRef, useState } from 'react';
+import Image from 'next/image';
 
 type PickerFood = {
   id: string;
@@ -449,13 +450,12 @@ function MatchCard({
       {/* Category image: honest category-level art (not a dish photo), shared
           by every recipe of this meal x cuisine combo; lazy + fixed 16:10. */}
       <div className="mb-3 overflow-hidden rounded-xl border border-neutral-200 dark:border-neutral-800">
-        <img
+        {/* S2-E: next/image — lazy by default, same fixed 16:10 box. */}
+        <Image
           src={`/images/catalog/cat-${r.mealType}-${r.cuisine}.webp`}
           alt={`${CUISINE_LABELS[r.cuisine]} ${MEAL_CARD_LABELS[r.mealType]} category card`}
           width={480}
           height={300}
-          loading="lazy"
-          decoding="async"
           className="aspect-[16/10] w-full object-cover"
         />
       </div>

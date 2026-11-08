@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import PrakritiResult, { type ProfileView } from './PrakritiResult';
 
 interface QuizQuestion {
   id: string;
@@ -9,30 +10,29 @@ interface QuizQuestion {
   options: { tag: string; label: string }[];
 }
 
-interface ProfileView {
-  answers: Record<string, string>;
+// S2-B: ProfileView moved to PrakritiResult (gains profileLabel/isTie).
+// The quiz keeps quizVersion around so the result can say "based on the
+// current questionnaire (v1)". history comes from the GET payload (newest
+// first, latest 10) — after a retake we re-load so the list stays truthful.
+
+export interface HistoryItem {
+  takenAt: string;
   vata: number;
   pitta: number;
   kapha: number;
   vataPct?: number;
   pittaPct?: number;
   kaphaPct?: number;
-  primary: string;
-  secondary: string;
-  takenAt: string;
+  profileLabel?: string;
+  isTie?: boolean;
 }
-
-const DOSHA_LABEL: Record<string, string> = { vata: 'Vata', pitta: 'Pitta', kapha: 'Kapha' };
-const DOSHA_BAR: Record<string, string> = {
-  vata: 'bg-sky-500',
-  pitta: 'bg-amber-500',
-  kapha: 'bg-emerald-500',
-};
 
 export default function PrakritiQuiz() {
   const [state, setState] = useState<'loading' | 'quiz' | 'result' | 'error'>('loading');
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [profile, setProfile] = useState<ProfileView | null>(null);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [quizVersion, setQuizVersion] = useState<number | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -45,6 +45,8 @@ export default function PrakritiQuiz() {
       const data = await res.json();
       setQuestions(data.questions ?? []);
       setProfile(data.profile ?? null);
+      setHistory(Array.isArray(data.history) ? data.history : []);
+      setQuizVersion(typeof data.quizVersion === 'number' ? data.quizVersion : null);
       setAnswers(data.profile?.answers ?? {});
       setState(data.profile ? 'result' : 'quiz');
     } catch (e) {
@@ -66,8 +68,9 @@ export default function PrakritiQuiz() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? 'Could not save your answers.');
-      setProfile(data.profile);
-      setState('result');
+      // Re-load so the history list and latest profile both come from the
+      // same GET (single source of truth; the POST response is not used for state).
+      await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.');
     } finally {
@@ -79,51 +82,13 @@ export default function PrakritiQuiz() {
   if (state === 'error') return <p className="text-sm text-red-600 dark:text-red-400">{error}</p>;
 
   if (state === 'result' && profile) {
-    const rows = [
-      { key: 'vata', count: profile.vata, pct: profile.vataPct },
-      { key: 'pitta', count: profile.pitta, pct: profile.pittaPct },
-      { key: 'kapha', count: profile.kapha, pct: profile.kaphaPct },
-    ];
     return (
-      <div>
-        <h2 className="text-sm font-semibold">
-          Your profile: {DOSHA_LABEL[profile.primary] ?? profile.primary} primary · {DOSHA_LABEL[profile.secondary] ?? profile.secondary} secondary
-        </h2>
-        <p className="mt-1 text-xs text-neutral-500">
-          Last taken {new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true }).format(new Date(profile.takenAt))}
-        </p>
-        <div className="mt-4 space-y-3">
-          {rows.map((r) => (
-            <div key={r.key} className="flex items-center gap-2">
-              <span className="w-14 shrink-0 text-sm text-neutral-500">{DOSHA_LABEL[r.key]}</span>
-              <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
-                <div className={`h-full ${DOSHA_BAR[r.key]}`} style={{ width: `${r.pct ?? Math.round((r.count / 12) * 100)}%` }} />
-              </div>
-              <span className="w-20 text-right text-sm tabular-nums">
-                {r.count}/12{r.pct !== undefined ? ` (${r.pct}%)` : ''}
-              </span>
-            </div>
-          ))}
-        </div>
-        <p className="mt-3 text-xs text-neutral-500">
-          In the Ayurvedic tradition everyone carries all three doshas - this is only a look at your current mix.
-        </p>
-        <div className="mt-4 flex gap-2">
-          <button
-            type="button"
-            onClick={() => { setAnswers({}); setState('quiz'); }}
-            className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
-          >
-            Retake the quiz
-          </button>
-          <a
-            href="/dashboard"
-            className="rounded-lg border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
-          >
-            Back to dashboard
-          </a>
-        </div>
-      </div>
+      <PrakritiResult
+        profile={profile}
+        history={history}
+        quizVersion={quizVersion}
+        onRetake={() => { setAnswers({}); setState('quiz'); }}
+      />
     );
   }
 

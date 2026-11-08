@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import AppShell from '@/components/AppShell';
 import HealingFoodsExplorer from '@/components/HealingFoodsExplorer';
 import { ANCIENT_PRACTICES, ANCIENT_PRACTICES_NOTE, sourceLabel } from '@/lib/ancientPractices';
+import AyurvedaGate from '@/components/AyurvedaGate';
 
 // P4c / U16 - Food as Medicine explorer (multi-lens: Ayurveda, science, lived experience).
 // Educational and non-medical; session-guarded like every other app surface.
@@ -25,8 +26,10 @@ export default async function HealingFoodsPage() {
           <HealingFoodsExplorer />
         </div>
 
-        {/* P5 - Ancient practices: what the old tradition says about eating itself. */}
-        <section className="mt-4 rounded-2xl border border-amber-200 bg-amber-50/40 p-5 dark:border-amber-900/60 dark:bg-amber-950/20">
+        {/* P5 - Ancient practices: what the old tradition says about eating itself.
+            S2-B6: gated on the Ayurveda off-switch. */}
+        <AyurvedaGate>
+          <section className="mt-4 rounded-2xl border border-amber-200 bg-amber-50/40 p-5 dark:border-amber-900/60 dark:bg-amber-950/20">
           <h2 className="text-lg font-semibold tracking-tight">Ancient practices</h2>
           <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
             What the old tradition says about eating itself - the daily rhythm the classical texts
@@ -53,7 +56,8 @@ export default async function HealingFoodsPage() {
           <p className="mt-4 text-xs leading-relaxed text-amber-700/80 dark:text-amber-400/70">
             {ANCIENT_PRACTICES_NOTE}
           </p>
-        </section>
+          </section>
+        </AyurvedaGate>
 
         <p className="mt-4 text-xs text-neutral-400">
           Educational information only - not medical advice. Evidence grades describe research

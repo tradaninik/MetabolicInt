@@ -2,46 +2,96 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { PRAKRITI_QUESTIONS, scorePrakriti } from '@mi/engine';
+import { PRAKRITI_QUESTIONS, QUIZ_VERSION, scorePrakriti } from '@mi/engine';
 
 export const dynamic = 'force-dynamic';
 
 // U11 Prakriti: owner-guarded self-assessment API. Educational only - not a medical classification.
-// GET returns the quiz questions plus your latest stored profile (history is kept; latest wins).
+// S2-B: every payload carries quizVersion; the profile leads with the no-dominance
+// profileLabel (a tie never implies a dominant dosha); GET also returns the recent
+// retake history (rows already exist and are indexed - zero schema change).
+const HISTORY_LIMIT = 10;
+
+function parseAnswers(json: string): Record<string, string> {
+  try {
+    const parsed = JSON.parse(json);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, string>;
+    }
+  } catch {
+    /* fall through to empty */
+  }
+  return {};
+}
+
+/** Rescore stored answers with the CURRENT engine so old rows also get the
+ *  tie-aware label. Returns null when the answers no longer validate. */
+function rescore(stored: Record<string, string>) {
+  try {
+    return scorePrakriti(stored);
+  } catch {
+    return null;
+  }
+}
+
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const latest = await prisma.prakritiProfile.findFirst({
+  const rows = await prisma.prakritiProfile.findMany({
     where: { userId: session.user.id },
     orderBy: { takenAt: 'desc' },
+    take: HISTORY_LIMIT,
   });
-  if (!latest) return NextResponse.json({ questions: PRAKRITI_QUESTIONS, profile: null });
+  if (rows.length === 0) {
+    return NextResponse.json({ questions: PRAKRITI_QUESTIONS, quizVersion: QUIZ_VERSION, profile: null, history: [] });
+  }
 
-  let stored: Record<string, string> = {};
-  try {
-    const parsed = JSON.parse(latest.answersJson);
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) stored = parsed as Record<string, string>;
-  } catch { stored = {}; }
+  const latest = rows[0];
+  const stored = parseAnswers(latest.answersJson);
+  const rescored = rescore(stored);
 
-  let pct: { vataPct: number; pittaPct: number; kaphaPct: number } | null = null;
-  try {
-    const rescored = scorePrakriti(stored);
-    pct = { vataPct: rescored.vataPct, pittaPct: rescored.pittaPct, kaphaPct: rescored.kaphaPct };
-  } catch { pct = null; }
+  const history = rows.map((row) => {
+    const r = rescore(parseAnswers(row.answersJson));
+    return {
+      takenAt: row.takenAt,
+      vata: row.vataScore,
+      pitta: row.pittaScore,
+      kapha: row.kaphaScore,
+      ...(r
+        ? {
+            vataPct: r.vataPct,
+            pittaPct: r.pittaPct,
+            kaphaPct: r.kaphaPct,
+            profileLabel: r.profileLabel,
+            isTie: r.isTie,
+          }
+        : {}),
+    };
+  });
 
   return NextResponse.json({
     questions: PRAKRITI_QUESTIONS,
+    quizVersion: QUIZ_VERSION,
     profile: {
       answers: stored,
       vata: latest.vataScore,
       pitta: latest.pittaScore,
       kapha: latest.kaphaScore,
-      ...(pct ?? {}),
+      ...(rescored
+        ? {
+            vataPct: rescored.vataPct,
+            pittaPct: rescored.pittaPct,
+            kaphaPct: rescored.kaphaPct,
+            profileLabel: rescored.profileLabel,
+            isTie: rescored.isTie,
+          }
+        : {}),
       primary: latest.primaryDosha,
       secondary: latest.secondaryDosha,
       takenAt: latest.takenAt,
     },
+    history,
   });
 }
 
@@ -87,6 +137,7 @@ export async function POST(req: Request) {
   });
 
   return NextResponse.json({
+    quizVersion: QUIZ_VERSION,
     profile: {
       answers: clean,
       vata: result.vata,
@@ -95,6 +146,8 @@ export async function POST(req: Request) {
       vataPct: result.vataPct,
       pittaPct: result.pittaPct,
       kaphaPct: result.kaphaPct,
+      profileLabel: result.profileLabel,
+      isTie: result.isTie,
       primary: result.primary,
       secondary: result.secondary,
       takenAt: row.takenAt,

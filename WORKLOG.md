@@ -2,6 +2,148 @@
 
 ---
 
+## 2026-10-29 - S2-B6 hotfix: the Ayurveda off-switch now reaches every traditional surface
+
+User-reported on the installed build: turning the Settings "Ayurveda personalisation" switch off hid the Know Your Body tradition sections and the wellness card (its shipped scope), but the Dashboard's Agni rhythm + Seasonal cards, the Log meal tastes/pairing/low-agni lenses, and the Healing foods ancient-practice panels stayed visible. Root cause was scope, not breakage: B5's switch gated only the B-mission client components; the dashboard cards and the healing-foods card are server components that predate the switch and cannot read a device-local (localStorage) preference themselves.
+
+- New `AyurvedaGate` client wrapper (mounted-safe, same pattern as the wellness card: renders nothing until mounted, then only when the preference is on). Children still render on the server into the RSC payload, so the gated server components keep their queries/props untouched - the gate is purely presentational.
+- Dashboard: the whole seasonal+agni row (not just the cards) is gated, so the off state leaves no empty grid gap.
+- Log meal: tastes-in-this-meal, the viruddha pairing check, the post-save pairing notes and the low-agni banner all gate on the same preference (page is a client component - same `useAyurvedaEnabled` pattern as PrakritiResult).
+- Healing foods: the "Ancient practices" card (server page) via AyurvedaGate; each food profile's TraditionSection (client) via the same gate.
+- Settings copy updated to state the real coverage: Know Your Body tradition sections, daily ideas, Dashboard seasonal/agni cards, Log meal tastes + pairing notes, Healing foods ancient-practice panels. Medical features and the user's own Know Your Body answers/history remain always-visible by design.
+- Scope discipline: zero new tables, zero migrations, no API changes, no package changes, no engine changes; every gate is presentational on existing surfaces.
+
+- Gates: 619 passed + 3 skipped · tsc ×3 silent · lint 0/0 · build "Compiled successfully".
+
+---
+
+## 2026-10-29 - Session 2 closeout: A (mockup fidelity) + B (Ayurveda Phase 1) + D (deps) + E (tech debt) shipped
+
+Session 2 delivered 16 commits on top of main @ 25ed988, every one gates-green before commit (tests never below 616+3 baseline - final: 619+3; tsc ×3 silent; lint 0/0 after E; build compiled).
+
+- Mission A (dashboard → mockup v1): A2+A2b console errors to zero (key-spread fix + explicit key), A6 timeline below charts row, A7 seasonal+agni side-by-side, A8 header Log glucose button, A9 brand MetabolicInt + heart mark, A10 active pill tint. A1 corrected to a NON-GAP with evidence (the mockup's steps card is 7 bars - exactly what the code renders; the old "line sparkline" claim predated the actual mockup). Live-verified at 1280+390 with VLM checks; console clean. Decision items held for the owner: A11 "Day" pill (functionality), A12 CheckIn/QuickAdd placement, A13 nav IA (deferred to Mission F).
+- Mission B (Ayurveda Phase 1): B1 engine tie semantics (profileLabel names every tied dosha - "Vata–Pitta profile" live-verified on a 5/5/2 tie; isTie; QUIZ_VERSION=1; 6→9 tests, tie tests UPDATED not deleted), API (quizVersion + history in GET, rescored labels for old rows), results page rebuilt (share-of-answers framing, interactive dosha panels, tradition/explore/how-calculated sections, safety copy throughout), history + deltas, wellness card (5 categories, variant cycler, IST-day dismissals, device-local) + Settings off-switch (zero medical loss, user data always visible). Open decisions resolved per documented defaults (results-page placement, localStorage) - flagged for owner confirmation.
+- Mission D: batch 1 next 15.5.28 + next-auth 4.24.15 (criticals, semver), batch 2 npm audit fix no-force (16 transitive, lockfile-only). 18 → 8 advisories; all 8 remaining need majors (vitest@5 chain, next@16 chain) - proposals in MISSION-D-dependency-report.md. No --force ever; Prisma untouched.
+- Mission E: 3 <img> → next/image (data-URL unoptimized for the meal photo); next lint → ESLint CLI (flat config + ignores; postcss named export fixed). Lint: 3 warnings + deprecation → 0/0.
+- Missions C + F: docs only - connection map + roadmap proposals delivered alongside (not committed to the repo; awaiting owner review).
+- Deliverables: session2-patches/ (16 patches) + tarball, gap lists, addendum, D report, connection map, roadmap, before/after screenshots incl. the live tie-break proof.
+
+---
+
+## 2026-10-29 - Session 2, D-batch-2: semver-safe transitive fixes (18 -> 8 advisories)
+
+Mission D batch 2: plain `npm audit fix` (NO --force - semver-safe only). 16 transitive packages changed (browserslist, brace-expansion, js-yaml, nanoid, postcss chain, sharp, source-map-js, baseline-browser-mapping, uuid et al.); ZERO package.json manifest changes (lockfile-only). Prisma client regenerated post-install.
+
+- Result: 18 advisories -> 8 remaining. Every remaining fix requires a MAJOR bump, out of scope by the semver rule: next@16.4.3 chain (next moderate + postcss high - also blocked this session by the no-Prisma-8 / Turso-flow caution and the Next 15 App Router investment) and vitest@5.0.5 chain (vitest/vite/vite-node/tinypool/esbuild/@vitest/mocker - written proposal delivered as MISSION-D-dependency-report.md).
+- Gates: 619 passed + 3 skipped · tsc ×3 silent · lint 0/0 · build "Compiled successfully".
+
+---
+
+## 2026-10-29 - Session 2, D-batch-1: critical runtime fixes - next 15.5.28 + next-auth 4.24.15
+
+Mission D (semver-only, small batches, NO --force). Batch 1 = the two CRITICAL runtime advisories, both semver-safe: next 15.5.19 -> 15.5.28 and next-auth 4.24.14 -> 4.24.15 (+ eslint-config-next aligned to 15.5.28; 7 packages changed). Prisma client regenerated after the install. No other dependency touched.
+
+- Gates: 619 passed + 3 skipped · tsc ×3 silent · lint 0/0 · build "Compiled successfully".
+- Remaining after this batch: the 10 semver-safe transitive advisories (batch 2) + the 6 vitest-chain advisories that need the vitest@5 MAJOR (written proposal only - see MISSION-D-vitest-proposal.md).
+
+---
+
+## 2026-10-29 - Session 2, E: lint to ZERO + next-lint -> ESLint CLI migration
+
+Mission E (both parts). The 3 known `<img>` warnings are gone and the deprecated `next lint` (removed in Next 16) is replaced by the ESLint CLI.
+
+- E1 img -> next/image: log/page.tsx meal photo (data URL -> `<Image unoptimized>`, identical rendering; the optimizer cannot handle data URLs); CookWithWhatIHave.tsx + RecipeCatalog.tsx category cards (`<Image>` with the same fixed 16:10 box; lazy by default, loading/decoding attrs dropped as redundant).
+- E2 lint migration: new eslint.config.mjs (FlatCompat extending next/core-web-vitals - the create-next-app@15 scaffold) + `.next/out/build` global ignores (which `next lint` applied silently) + package.json `"lint": "eslint ."`. `.eslintrc.json` removed. Broader scope than `next lint` (which only scanned source dirs): postcss.config.mjs now linted too - its anonymous-default-export warning fixed with a named const. NO ESLint dependency changes; Prisma untouched (5.22 stays).
+- Gates: 619 passed + 3 skipped · tsc ×3 silent · **lint 0 warnings / 0 errors** (was 3 warnings + deprecation notice) · build "Compiled successfully".
+
+---
+
+## 2026-10-29 - Session 2, A2b: explicit key on MeasuredDot (completes the no-console-errors acceptance)
+
+The B-smoke captured a NEW console warning the A-smoke grep missed (it only counted the key-spread string): "Each child in a list should have a unique key prop... passed a child from Line" — 3 occurrences, not present in the pre-session baseline logs. Root cause: A2's first fix removed the spread (which had smuggled recharts' key in) but also removed the key itself.
+
+- Fix: pass an explicit `key` on the MeasuredDot element — `key={p.payload?.t ?? p.index}` (the point's timestamp is its stable identity; index is fallback). This is exactly what React's original error message asked for: keys passed directly to JSX, never via spread.
+- Gates: 619 passed + 3 skipped · tsc ×3 silent · lint = the 3 known `<img>` warnings · build "Compiled successfully".
+- Verification pending in the final smoke (dashboard console must show ZERO errors of either kind).
+
+---
+
+## 2026-10-29 - Session 2, B-wellness: "What this means for your day" + Ayurveda off-switch (B0-10/11/12)
+
+Mission B step 5, with the two open decisions resolved per the documented defaults (both flagged to the owner): wellness card lives on the PRAKITI RESULTS PAGE (the mockup dashboard shows no dosha-specific card - its three suggestions are pattern/medical), and storage is DEVICE-LOCAL (B4: zero new tables, zero Turso migration).
+
+- New lib/ayurveda-prefs.ts: `mi.ayurveda.personalisation` localStorage preference (default ON, degrades ON on storage failure), mounted-safe useAyurvedaEnabled hook, IST-day helpers, and the wellness dismiss/variant keys - the Add-to-plan device-local pattern, extended.
+- New PrakritiWellnessCard (results page, inside "What this tradition suggests"): five categories - Food / Movement / Relaxation / Sleep / Reflection. Ideas are keyed to the user's own quiz answers ONLY (on a tie the categories alternate between the tied doshas - balanced, no winner implied); two variants per category with a "Different idea" cycler (variant persists as the user's preference) and a "Not today" dismissal (resets with the IST day, Add-to-plan pattern). Links only into existing modules (recipes / activity+sleep logging). NEVER a response to any medical reading - the selection deliberately does not read glucose/sleep/steps data (Layer separation: traditional content reacts to stated preferences only).
+- Off-switch (Settings -> "Ayurveda personalisation", role=switch): OFF hides the per-dosha tradition panels, "What this tradition suggests", and the wellness card - replaced by a one-line note linking back to Settings. The user's own assessment (label, scores, history) ALWAYS stays visible. Zero loss of any medical feature (nothing on this page is medical). Device-local; if cross-device sync is ever wanted that is a written UserSettings.prefsJson turso-migrate proposal first.
+- Safety copy stays hard: every idea is a neutral action or explicitly "the tradition favours/suggests"; nothing claims a medical benefit or mentions any measurement.
+- Gates: 619 passed + 3 skipped · tsc ×3 silent · lint = the 3 known `<img>` warnings · build "Compiled successfully".
+
+---
+
+## 2026-10-29 - Session 2, B-history: retake history + deltas on the results page (B0-8)
+
+Mission B step 4. Rows already existed and are indexed — this is UI only, zero schema/API change (GET has returned history[] since the B-API commit).
+
+- PrakritiQuiz captures `history` from the GET payload; after a successful retake it re-runs load() so the latest profile and history always come from the same GET (single source of truth; the POST response is no longer used for state).
+- PrakritiResult renders "Your assessment history": newest first, date + no-dominance label + V/P/K counts, the newest tagged "latest", and every older attempt shows "vs previous: V +n · P −n · K ±0" deltas against the attempt just newer than it. Single-attempt accounts get the honest "every retake is kept" line instead of an empty list.
+- Gates: 619 passed + 3 skipped · tsc ×3 silent · lint = the 3 known `<img>` warnings · build "Compiled successfully".
+
+---
+
+## 2026-10-29 - Session 2, B-results: Know Your Body results page rebuilt (B0-1/2/4/5/6/7/9 + safety copy)
+
+Mission B step 3. The old result view ("Your profile: Vata primary · Pitta secondary" + 3 static bars) is replaced by a full results page. New components: PrakritiResult.tsx (client) + lib/ayurveda-content.ts (static, clearly-labelled traditional copy).
+
+- B0-1/B0-5: results lead with the engine's profileLabel ("Vata–Pitta profile" on ties) + "Based on the current questionnaire (v1) · last taken …"; ties get an explicit "implies no dominance" note. Legacy primary/secondary is only a fallback for pre-B1 data.
+- B0-2: shares are framed "share of your 12 answers" with the guard "Shares describe your answers, not your body's biology — this is not a 'how much of you is Vata' percentage. Self-reported answers — not medical measurements."
+- B0-4: the three doshas render as interactive rows (count X/12, share %, bar); tapping expands a per-dosha "What the tradition associates with …" panel (balanced/imbalance qualities), each stamped "Traditional account — not a medical description of you."
+- B0-6: "What this tradition suggests" — gentle per-dosha reflection points for the top-count dosha(s), badged "traditional interpretation", footer: medical and nutrition needs always come first; herbal or significant dietary changes belong with a healthcare professional.
+- B0-7: "Explore your preferences" links to existing modules ONLY (healing-foods, recipes, log activity & sleep, dashboard seasonal+agni) — no new stores, no duplicate records.
+- B0-9: "How this is calculated" collapsible explainer (12 questions, one tag per answer, share-of-answers math summing to 100, ties labelled as ties, not clinically validated, not a diagnosis, retakes kept).
+- Safety: no string anywhere describes a dosha as explaining/causing/aggravating a medical measurement; attribution vocabulary untouched (this page makes no medical claims). Internal links use next/link (lint clean).
+- Gates: 619 passed + 3 skipped · tsc ×3 silent · lint = the 3 known `<img>` warnings · build "Compiled successfully".
+
+---
+
+## 2026-10-29 - Session 2, B-API: quizVersion + history in GET, B1 fields in every payload
+
+Mission B step 2. The prakriti API now speaks the B1 engine's language; zero schema change (history rows + index already existed).
+
+- GET: single findMany (latest 10, takenAt desc) replaces the findFirst - rows[0] IS the latest, behavior preserved. Response gains `quizVersion` (top level) and `history[]` (takenAt + stored counts + rescored pcts/profileLabel/isTie per row). Every stored row is RESCORED with the current engine, so pre-B1 rows also display the no-dominance label; rows whose answers no longer validate degrade to counts-only, never an error.
+- GET/POST `profile` payloads gain `profileLabel` + `isTie` + `quizVersion` (POST response also carries quizVersion top level). POST stays a new-row-per-retake, owner-guarded, 400 on incomplete answers - untouched semantics.
+- Gates: 619 passed + 3 skipped · tsc ×3 silent · lint = the 3 known `<img>` warnings · build "Compiled successfully".
+
+---
+
+## 2026-10-29 - Session 2, B1: engine tie semantics - profileLabel + QUIZ_VERSION (Ayurveda Phase 1)
+
+Mission B step 1 (engine-first, tests updated deliberately - see below). The spec complaint, live-reproduced at 25ed988: a 5/5/2 tie displayed "Vata primary · Pitta secondary" at 42%/42% - a tie implying dominance.
+
+- `packages/engine/src/prakriti.ts`: new `profileLabel` + `isTie` on PrakritiResult. Tie (top count shared by 2+ doshas) -> every sharer named with en-dashes, ordered by count then the engine's canonical vata > pitta > kapha order ("Vata–Pitta profile", "Vata–Pitta–Kapha profile"); clear winner keeps "X primary · Y secondary". `primary`/`secondary` keep the legacy deterministic order ONLY for stored rows / API compat - the UI must lead with `profileLabel`. New `QUIZ_VERSION = 1` constant, stamped on every result (no Prisma column - per B4, zero schema change this session).
+- Tie-order note: the canonical order matches the spec's own "Vata–Pitta profile" example for the 42/42 case; strict alphabetical on ties would render that case "Pitta–Vata". Flagged to the owner - one-line change if alphabetical is preferred.
+- DELIBERATE TEST CHANGES (prakriti.test.ts, 6 -> 9 tests, suite 616 -> 619 passed): the 3 old tie tests are UPDATED, not deleted - each keeps its legacy primary/secondary assertions and gains profileLabel/isTie assertions ("Vata–Pitta profile" for 42/42/16, "Pitta–Kapha profile", "Vata–Pitta–Kapha profile" for 4/4/4). NEW tests: vata/kapha tie label, 1-answer-gap-is-NOT-a-tie boundary, and the QUIZ_VERSION stamp. The unanimous test gains the three new result fields.
+- Gates: 619 passed + 3 skipped (51 files) · tsc ×3 silent · lint = the 3 known `<img>` warnings · build "Compiled successfully".
+
+---
+
+## 2026-10-29 - Session 2, A10: glucose chart active pill = green tint
+
+Mission A (mockup fidelity). Mockup: the selected range pill is a light-green tint with dark-green text; the implementation used a solid dark-green pill with white text.
+
+- Fix (GlucoseTodayChart.tsx): active pill -> bg-brand-100 + text-brand-800 (dark: brand-900/40 + brand-200), matching the app's existing selected-nav pattern; inactive pills unchanged.
+- Gates: 616 passed + 3 skipped · tsc ×3 silent · lint = the 3 known `<img>` warnings · build "Compiled successfully".
+
+---
+
+## 2026-10-29 - Session 2, A9: sidebar brand = MetabolicInt + heart mark
+
+Mission A (mockup fidelity). Mockup brand: "MetabolicInt" + "Personal metabolic model" subtitle + heart-in-rounded-square mark; implementation read "Metabolic" with a plain green square.
+
+- Fix (AppShell.tsx): brand text -> "MetabolicInt", subtitle line under it (desktop sidebar; mobile top bar stays compact), and a new inline BrandMark component (heart SVG inside the brand square - no new dependencies). Same treatment in the mobile header.
+- Gates: 616 passed + 3 skipped · tsc ×3 silent · lint = the 3 known `<img>` warnings · build "Compiled successfully".
+
+---
+
 ## 2026-10-29 - Session 2, A8: header "Log glucose" outline button
 
 Mission A (mockup fidelity). The mockup header carries two actions - "Log glucose" (outline) + "+ Log a meal" (solid green); the implementation had only the meal button.

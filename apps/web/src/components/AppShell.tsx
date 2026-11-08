@@ -50,8 +50,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {/* Sidebar (desktop) */}
       <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-950 lg:flex">
         <Link href="/dashboard" className="mb-8 flex items-center gap-2">
-          <div className="h-7 w-7 rounded-lg bg-brand-500" aria-hidden />
-          <span className="font-semibold tracking-tight">Metabolic</span>
+          <BrandMark className="h-7 w-7 rounded-lg" />
+          <span className="flex flex-col leading-tight">
+            <span className="font-semibold tracking-tight">MetabolicInt</span>
+            <span className="text-[10px] text-neutral-500 dark:text-neutral-400">
+              Personal metabolic model
+            </span>
+          </span>
         </Link>
         <nav className="flex flex-1 flex-col gap-1">
           {NAV.map((n) => (
@@ -83,8 +88,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <div className="flex flex-1 flex-col">
         <header className="sticky top-0 z-10 flex items-center justify-between border-b border-neutral-200 bg-white/80 px-4 py-3 backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/80 lg:hidden">
           <Link href="/dashboard" className="flex items-center gap-2">
-            <div className="h-6 w-6 rounded-md bg-brand-500" aria-hidden />
-            <span className="font-semibold tracking-tight">Metabolic</span>
+            <BrandMark className="h-6 w-6 rounded-md" />
+            <span className="font-semibold tracking-tight">MetabolicInt</span>
           </Link>
           <button
             onClick={() => signOut({ callbackUrl: '/' })}
@@ -228,6 +233,21 @@ function MoreSheet({ onClose }: { onClose: () => void }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Brand mark per the approved v1 mockup: a heart inside the rounded
+ * brand-colored square (inline SVG, no new dependencies). `className`
+ * sizes the square (h-7 w-7 desktop, h-6 w-6 mobile header).
+ */
+function BrandMark({ className }: { className: string }) {
+  return (
+    <div className={`flex items-center justify-center bg-brand-500 ${className}`} aria-hidden>
+      <svg viewBox="0 0 24 24" className="h-[60%] w-[60%] text-white" fill="currentColor" aria-hidden="true">
+        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+      </svg>
     </div>
   );
 }

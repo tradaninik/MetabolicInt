@@ -1,7 +1,18 @@
 // P4b / U11 - Prakriti self-assessment scoring (educational, non-medical).
-// Pure engine: answers map questionId -> dosha tag. Deterministic tie-break: vata > pitta > kapha.
+// Pure engine: answers map questionId -> dosha tag.
+//
+// S2-B1 tie semantics: when the top count is shared by 2+ doshas the result's
+// `profileLabel` names EVERY sharer ("Vata–Pitta profile" / "Vata–Pitta–Kapha profile")
+// and `isTie` is true — a tie must never imply dominance. `primary`/`secondary`
+// keep the legacy deterministic order (vata > pitta > kapha) ONLY for backward
+// compatibility with stored rows; the UI leads with `profileLabel`, never with
+// "primary" on a tie. Percentages are shares of the user's 12 answers, never a
+// biological constitution claim.
 
 export type Dosha = 'vata' | 'pitta' | 'kapha';
+
+/** Questionnaire revision. Bump when any question/option/tag changes; returned with every result (S2-B1). */
+export const QUIZ_VERSION = 1;
 
 export interface PrakritiOption {
   tag: Dosha;
@@ -68,6 +79,8 @@ export const PRAKRITI_QUESTIONS: PrakritiQuestion[] = [
 
 const DOSHA_ORDER: Dosha[] = ['vata', 'pitta', 'kapha'];
 
+const DOSHA_DISPLAY: Record<Dosha, string> = { vata: 'Vata', pitta: 'Pitta', kapha: 'Kapha' };
+
 export interface PrakritiResult {
   vata: number;
   pitta: number;
@@ -75,8 +88,34 @@ export interface PrakritiResult {
   vataPct: number;
   pittaPct: number;
   kaphaPct: number;
+  /** Legacy fields, kept for stored rows / API compat. On a tie they follow the
+   *  canonical vata > pitta > kapha order but must NOT be presented as dominance — use profileLabel. */
   primary: Dosha;
   secondary: Dosha;
+  /** What the UI leads with. Clear winner: "Vata primary · Pitta secondary".
+   *  Tie: every sharer named with en-dashes, ordered by count then canonical order
+   *  ("Vata–Pitta profile"), implying no dominance. */
+  profileLabel: string;
+  /** True when the top count is shared by 2+ doshas. */
+  isTie: boolean;
+  /** Questionnaire revision this scoring belongs to (S2-B1). */
+  quizVersion: number;
+}
+
+/** Build the no-dominance profile label. `ranked` is sorted count desc, canonical order asc. */
+function buildProfileLabel(counts: Record<Dosha, number>, ranked: Dosha[]): { profileLabel: string; isTie: boolean } {
+  const top = counts[ranked[0]];
+  const sharers = ranked.filter((d) => counts[d] === top);
+  if (sharers.length === 1) {
+    return {
+      profileLabel: `${DOSHA_DISPLAY[ranked[0]]} primary · ${DOSHA_DISPLAY[ranked[1]]} secondary`,
+      isTie: false,
+    };
+  }
+  return {
+    profileLabel: `${sharers.map((d) => DOSHA_DISPLAY[d]).join('–')} profile`,
+    isTie: true,
+  };
 }
 
 // Whole percentages that always sum to 100, using INTEGER arithmetic only.
@@ -127,6 +166,7 @@ export function scorePrakriti(answers: Record<string, string>): PrakritiResult {
     (a, b) => counts[b] - counts[a] || DOSHA_ORDER.indexOf(a) - DOSHA_ORDER.indexOf(b)
   );
   const pct = percentages(counts);
+  const { profileLabel, isTie } = buildProfileLabel(counts, ranked);
   return {
     vata: counts.vata,
     pitta: counts.pitta,
@@ -136,5 +176,8 @@ export function scorePrakriti(answers: Record<string, string>): PrakritiResult {
     kaphaPct: pct.kaphaPct,
     primary: ranked[0],
     secondary: ranked[1],
+    profileLabel,
+    isTie,
+    quizVersion: QUIZ_VERSION,
   };
 }
