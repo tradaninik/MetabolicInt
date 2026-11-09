@@ -21,6 +21,7 @@
 // is printed on the PASSWORD line at the end.
 import * as prismaMod from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { createRequire } from "node:module";
 
 const DEMO_EMAIL = "lakshmi@demo.metabolic.app";
 const DEMO_PASSWORD = "Lakshmi@57";
@@ -32,7 +33,25 @@ const modDefault: any =
   modAny.default && modAny.default.PrismaClient ? modAny.default : modAny;
 const PrismaClientCtor: any =
   modAny.PrismaClient || modDefault.PrismaClient;
-const prisma: any = PrismaClientCtor ? new PrismaClientCtor() : null;
+const require2: any = createRequire(import.meta.url);
+function makePrisma(): any {
+  if (!PrismaClientCtor) return null;
+  const url = process.env.DATABASE_URL || "";
+  if (url.indexOf("libsql://") === 0) {
+    try {
+      const { createClient } = require2("@libsql/client");
+      const { PrismaLibSQL } = require2("@prisma/adapter-libsql");
+      const libsql = createClient({ url: url, authToken: process.env.DATABASE_AUTH_TOKEN });
+      console.log("DBMODE remote (Turso, libsql adapter)");
+      return new PrismaClientCtor({ adapter: new PrismaLibSQL(libsql) });
+    } catch (e: any) {
+      fatal("libsql adapter unavailable: " + msg(e));
+    }
+  }
+  console.log("DBMODE local (sqlite file)");
+  return new PrismaClientCtor();
+}
+const prisma: any = makePrisma();
 
 function ascii(v: any): string {
   const s = v === null || v === undefined ? "" : String(v);
