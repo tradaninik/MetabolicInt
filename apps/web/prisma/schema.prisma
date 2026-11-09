@@ -93,6 +93,7 @@ model User {
   dayTags          DayContextTag[]
   insights          InsightCard[]
   coachThreads      CoachThread[]
+  intelligenceSurvey IntelligenceSurvey?
 
   // Care relationships
   careGiven         CareRelationship[] @relation("Caregiver")
@@ -514,4 +515,13 @@ model PrakritiProfile {
   takenAt        DateTime @default(now())
 
   @@index([userId, takenAt])
+}
+/// P4: personalization questionnaire feeding the intelligence engine
+/// (diet pattern, movement, sleep/stress, symptoms, family history, goal).
+model IntelligenceSurvey {
+  id          String   @id @default(cuid())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String   @unique
+  answersJson String   // JSON: SurveyAnswers (whitelisted by the survey route)
+  updatedAt   DateTime @updatedAt
 }

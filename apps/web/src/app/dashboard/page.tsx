@@ -18,6 +18,7 @@ import CheckInCard from '@/components/CheckInCard';
 import QuickAdd from '@/components/QuickAdd';
 import SeasonalCard from '@/components/SeasonalCard';
 import AgniRhythmCard from '@/components/AgniRhythmCard';
+import IntelligenceSection from '../../components/dashboard/IntelligenceSection';
 
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
@@ -39,6 +40,7 @@ export default async function DashboardPage() {
   return (
     <AppShell>
       <div className="mx-auto max-w-6xl">
+        <IntelligenceSection />
         {/* Header (dashboard revamp v1): greeting + honest "Updated <time> · <source>"
             stamp replace the old hero banner. The stamp is the most recent of the
             user's own records, recomputed on every render - QuickAdd saves already

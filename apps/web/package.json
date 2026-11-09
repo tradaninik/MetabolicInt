@@ -10,6 +10,7 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
+    "demo:lakshmi": "tsx scripts/devdata-lakshmi.ts",
     "db:studio": "prisma studio",
     "test": "vitest run",
     "postinstall": "prisma generate",

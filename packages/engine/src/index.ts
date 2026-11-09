@@ -32,3 +32,4 @@ export * from './labCompare';
 export * from './patterns';
 export * from './attribution';
 export * from './suggestions';
+export * from './intelligence';
